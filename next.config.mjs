@@ -7,15 +7,18 @@ const nextConfig = {
     formats: ["image/avif", "image/webp"],
   },
   async redirects() {
+    // Legacy URL from an earlier draft; the Privacy Policy lives at /privacy.
+    const legacy = [{ source: "/privacy-policy", destination: "/privacy", permanent: true }];
     // Once samsal.com is added to the Vercel project, everything on it is
     // permanently redirected to the primary domain (samsal.co.ke).
     const primary = "https://samsal.co.ke";
-    return ["samsal.com", "www.samsal.com", "www.samsal.co.ke"].map((host) => ({
+    const domainRedirects = ["samsal.com", "www.samsal.com", "www.samsal.co.ke"].map((host) => ({
       source: "/:path*",
       has: [{ type: "host", value: host }],
       destination: `${primary}/:path*`,
       permanent: true,
     }));
+    return [...legacy, ...domainRedirects];
   },
   async headers() {
     return [
