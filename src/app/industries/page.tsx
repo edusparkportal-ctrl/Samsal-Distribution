@@ -52,7 +52,7 @@ export default function IndustriesPage() {
                   {ind.categories.map((slug) => {
                     const c = getCategory(slug);
                     return c ? (
-                      <Link key={slug} href={`/products#${slug}`} className="rounded border border-grey-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:border-teal">
+                      <Link key={slug} href={`/products?category=${slug}`} className="rounded border border-grey-300 bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:border-teal">
                         {c.name}
                       </Link>
                     ) : null;

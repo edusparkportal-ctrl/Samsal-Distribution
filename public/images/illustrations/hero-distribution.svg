@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-label="Illustration of a delivery truck beside stacked cartons on a pallet">
+  <rect width="960" height="720" fill="#1B3A63"/>
+  <g stroke="#fff" stroke-opacity=".06"><path d="M0 90H960M0 180H960M0 270H960M0 360H960M0 450H960M0 540H960M0 630H960M120 0V720M240 0V720M360 0V720M480 0V720M600 0V720M720 0V720M840 0V720"/></g>
+  <rect y="520" width="960" height="200" fill="#142D4E"/>
+  <rect y="520" width="960" height="6" fill="#F2A541"/>
+  <!-- route line -->
+  <path d="M60 140C220 90 330 200 480 150S760 90 900 160" fill="none" stroke="#6FD0C8" stroke-width="3" stroke-dasharray="3 12" stroke-linecap="round"/>
+  <g fill="#6FD0C8"><circle cx="60" cy="140" r="9"/><circle cx="480" cy="150" r="9"/></g>
+  <circle cx="900" cy="160" r="11" fill="#F2A541"/>
+  <!-- truck -->
+  <g>
+    <rect x="70" y="330" width="330" height="170" rx="6" fill="#fff"/>
+    <rect x="70" y="330" width="330" height="28" fill="#0B8F87"/>
+    <path d="M400 380h86l50 52v68H400z" fill="#F2A541"/>
+    <path d="M420 394h58l34 36h-92z" fill="#142D4E" opacity=".85"/>
+    <rect x="70" y="486" width="466" height="14" fill="#0E2038"/>
+    <rect x="110" y="392" width="70" height="12" rx="6" fill="#142D4E"/><rect x="110" y="414" width="120" height="10" rx="5" fill="#CBD3DB"/>
+    <g fill="#0E2038"><circle cx="160" cy="506" r="32"/><circle cx="460" cy="506" r="32"/></g>
+    <g fill="#CBD3DB"><circle cx="160" cy="506" r="14"/><circle cx="460" cy="506" r="14"/></g>
+  </g>
+  <!-- pallet with cartons -->
+  <g>
+    <rect x="620" y="488" width="270" height="16" fill="#D98E27"/>
+    <rect x="620" y="504" width="50" height="16" fill="#F2A541"/><rect x="735" y="504" width="50" height="16" fill="#F2A541"/><rect x="840" y="504" width="50" height="16" fill="#F2A541"/>
+    <rect x="626" y="390" width="126" height="98" fill="#E8C792"/><rect x="626" y="390" width="126" height="16" fill="#D9B27A"/><rect x="682" y="390" width="12" height="98" fill="#142D4E" opacity=".85"/>
+    <rect x="758" y="390" width="126" height="98" fill="#E8C792"/><rect x="758" y="390" width="126" height="16" fill="#D9B27A"/><rect x="814" y="390" width="12" height="98" fill="#142D4E" opacity=".85"/>
+    <rect x="660" y="292" width="126" height="98" fill="#E8C792"/><rect x="660" y="292" width="126" height="16" fill="#D9B27A"/><rect x="716" y="292" width="12" height="98" fill="#142D4E" opacity=".85"/>
+    <rect x="790" y="292" width="90" height="98" fill="#E8C792"/><rect x="790" y="292" width="90" height="16" fill="#D9B27A"/>
+    <rect x="676" y="336" width="42" height="34" rx="3" fill="#fff"/><rect x="682" y="344" width="30" height="5" fill="#0B8F87"/>
+  </g>
+</svg>

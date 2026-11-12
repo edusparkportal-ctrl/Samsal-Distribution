@@ -1,17 +1,20 @@
 import { CategoryIcon } from "@/components/Icons";
 import { Photo, QuoteLink } from "@/components/ui";
+import { photos, productPhotos } from "@/config/images";
 import { getCategory, type Product } from "@/config/products";
-import { photos } from "@/config/images";
 
 export function ProductCard({ product }: { product: Product }) {
   const category = getCategory(product.category);
+  // Priority: product's own image (products.ts) > per-product photo (images.ts) > category image
+  const slot = product.image ?? productPhotos[product.slug] ?? photos[product.category] ?? null;
+
   return (
-    <article className="card flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
+    <article className="card group flex h-full flex-col overflow-hidden transition-shadow duration-200 hover:shadow-md">
       <Photo
-        slot={product.image ?? null}
+        slot={slot}
         tone="light"
-        sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-        className="aspect-[16/9]"
+        sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 100vw"
+        className="aspect-[16/10] border-b border-grey-200"
         fallback={category ? <CategoryIcon name={category.icon} size={40} strokeWidth={1.5} /> : null}
       />
       <div className="flex flex-1 flex-col p-5">
@@ -33,12 +36,9 @@ export function ProductCard({ product }: { product: Product }) {
         </dl>
 
         <div className="mt-auto pt-5">
-          <QuoteLink product={product.name} />
+          <QuoteLink product={product.name} category={product.category} />
         </div>
       </div>
     </article>
   );
 }
-
-// re-exported so photo slots for categories are discoverable in one import path
-export const categoryPhoto = (slug: string) => photos[slug] ?? null;

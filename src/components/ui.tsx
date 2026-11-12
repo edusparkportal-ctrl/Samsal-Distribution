@@ -107,10 +107,23 @@ export function BulletList({ items, dark = false }: { items: string[]; dark?: bo
   );
 }
 
-export function QuoteLink({ product, className = "btn-outline w-full", label = "Request a Quote" }: { product?: string; className?: string; label?: string }) {
-  const href = product ? `${quoteHref}?product=${encodeURIComponent(product)}` : quoteHref;
+export function QuoteLink({
+  product,
+  category,
+  className = "btn-outline w-full",
+  label = "Request a Quote",
+}: {
+  product?: string;
+  category?: string; // category slug
+  className?: string;
+  label?: string;
+}) {
+  const params = new URLSearchParams();
+  if (product) params.set("product", product);
+  if (category) params.set("category", category);
+  const qs = params.toString();
   return (
-    <Link href={href} className={className}>
+    <Link href={qs ? `${quoteHref}?${qs}` : quoteHref} className={className} aria-label={product ? `${label}: ${product}` : label}>
       {label}
     </Link>
   );

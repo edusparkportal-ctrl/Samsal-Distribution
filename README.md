@@ -1,4 +1,4 @@
-# SAMSAL Supply & Distribution Limited - Corporate Website
+# SAMSAL Supply & Distribution Limited - Corporate Website (Version 2)
 
 Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS 3 · Lucide icons · Vercel-ready.
 No database. The only server code is one API route that emails quotation requests.
@@ -65,6 +65,8 @@ See `.env.example` for the full list.
 | `NEXT_PUBLIC_CONTACT_EMAIL` | Shown on Contact page and footer | When confirmed |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | Digits only, e.g. `2547XXXXXXXX`. WhatsApp buttons appear only when set | When confirmed |
 | `NEXT_PUBLIC_BUSINESS_HOURS` | e.g. `Mon-Fri 8:00-17:00` | When confirmed |
+| `FORM_TOKEN_SECRET` | Long random string (`openssl rand -hex 32`) that signs the anti-bot timing token. Server-side only | Strongly recommended |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared rate limiting across serverless instances (free Upstash Redis; the Vercel Marketplace adds them automatically) | Strongly recommended |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Optional Cloudflare Turnstile CAPTCHA | Optional |
 
 Variables beginning `NEXT_PUBLIC_` are visible in the browser by design (they are public contact details).
@@ -101,7 +103,23 @@ Until your domain is verified you can test with `QUOTE_FROM_EMAIL="SAMSAL Websit
 6. Set `NEXT_PUBLIC_SITE_URL=https://samsal.co.ke` and redeploy so canonical URLs, sitemap and social previews use the final domain.
 7. Submit `https://samsal.co.ke/sitemap.xml` in Google Search Console, and claim a Google Business Profile for local Nairobi visibility once you have a confirmed address/phone.
 
-## 8. Spam protection and security (what is built in)
+## 8. Security of the quotation form (Version 2)
+
+- **Attachments are verified by content, not just name.** The server checks the extension, the browser-declared MIME type
+  and the file's real bytes (PDF, PNG, JPEG signatures; Word/Excel packages; legacy .doc/.xls; valid UTF-8 text for
+  CSV/TXT). A renamed .exe, a PNG named .pdf, or a fake .docx is rejected. 4 MB limit enforced before and after parsing.
+- **Signed timing token.** The server issues an HMAC-signed "form opened" timestamp (`/api/quote/token`); a bot cannot forge
+  it, so instant submissions are refused. Requires `FORM_TOKEN_SECRET`.
+- **Shared rate limiting.** With Upstash configured, limits (5 per 10 minutes per IP) hold across all serverless instances.
+  Without it, a per-instance memory limiter is used and a warning is logged; this is weaker.
+- **Also:** honeypot, link-stuffing check, same-origin check, optional Turnstile, input sanitisation, HTML-escaped emails.
+- **Honest delivery.** Success is reported only when Resend accepts the email and returns a message id. Misconfiguration or a
+  provider error returns an error to the visitor. In development (not production) the form says plainly that nothing was
+  emailed.
+- Secrets (`RESEND_API_KEY`, `FORM_TOKEN_SECRET`, `UPSTASH_*`, `TURNSTILE_SECRET_KEY`) have no `NEXT_PUBLIC_` prefix and never
+  reach the browser.
+
+## 8b. Older notes: spam protection (Version 1)
 
 - Server-side validation and sanitisation of every field (the browser checks are only for convenience).
 - Honeypot field, minimum-fill-time check, per-IP rate limit (5 submissions / 10 min).
@@ -111,7 +129,18 @@ Until your domain is verified you can test with `QUOTE_FROM_EMAIL="SAMSAL Websit
 - Security headers (`nosniff`, frame, referrer, permissions policy). API keys are server-side only.
 - The in-memory rate limiter is per server instance. For stricter limits add Upstash Redis / Vercel KV.
 
-## 9. Information still needed from the business (marked CONFIRM in code)
+## 9. Legal pages
+
+`/privacy` and `/terms` are DRAFTS that must be reviewed by a qualified Kenyan advocate or data protection adviser. While
+`legal.reviewed` is `false` in `src/config/site.ts`, both pages show a draft banner, are `noindex` and are left out of the
+sitemap. After approval: complete the [bracketed] items, set `reviewed: true`, and redeploy. The pages do not claim legal compliance.
+
+## 10. Images
+
+Images are original vector illustrations (`public/images/illustrations`), configured in one place:
+`src/config/images.ts`. They are NOT photographs. See `docs/PHOTOGRAPHY.md` to swap in real, licensed photography.
+
+## 11. Information still needed from the business (marked CONFIRM in code)
 
 - Telephone, business email, WhatsApp number, business hours, and (if wanted) physical address and social profile URLs.
 - Real photography (see `src/config/images.ts`). None is bundled; slots show a clean branded panel meanwhile.
@@ -121,7 +150,7 @@ Until your domain is verified you can test with `QUOTE_FROM_EMAIL="SAMSAL Websit
 - Final logo artwork, if one exists.
 - Legal pages (Privacy Policy / Terms) : recommended before launch, particularly because the forms collect personal data (Kenya Data Protection Act). Have these reviewed by a qualified adviser.
 
-## 10. Structure
+## 12. Structure
 
 ```
 src/

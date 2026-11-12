@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Script from "next/script";
 import { AlertCircle, CheckCircle2, Loader2, Paperclip } from "lucide-react";
+import { categories } from "@/config/products";
 import {
   LIMITS,
   emptyValues,
@@ -64,19 +65,22 @@ function Field({ name, label, error, required, hint, children }: FieldProps) {
 export function QuoteForm({
   kind = "quote",
   initialProduct = "",
+  initialCategory = "",
   initialMessage = "",
   turnstileSiteKey = null,
 }: {
   kind?: FormKind;
   initialProduct?: string;
+  initialCategory?: string;
   initialMessage?: string;
   turnstileSiteKey?: string | null;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const startedAt = useRef<number>(0);
+  const formToken = useRef<string>("");
   const [values, setValues] = useState<FormValues>({
     ...emptyValues,
     product: initialProduct,
+    category: initialCategory,
     message: initialMessage,
   });
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -86,8 +90,16 @@ export function QuoteForm({
   const [minDate, setMinDate] = useState("");
 
   useEffect(() => {
-    startedAt.current = Date.now();
     setMinDate(todayInNairobi());
+    // Server-signed "form opened" token used by the API's anti-bot timing check.
+    fetch("/api/quote/token", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { token?: string }) => {
+        formToken.current = d.token ?? "";
+      })
+      .catch(() => {
+        formToken.current = "";
+      });
   }, []);
 
   const set = (k: keyof FormValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -129,7 +141,7 @@ export function QuoteForm({
     try {
       const body = new FormData(formRef.current!);
       body.set("kind", kind);
-      body.set("startedAt", String(startedAt.current));
+      body.set("formToken", formToken.current);
       // send the sanitised values rather than raw DOM text
       (Object.keys(clean) as (keyof FormValues)[]).forEach((k) => body.set(k, clean[k]));
       if (kind !== "quote") body.delete("attachment");
@@ -159,12 +171,11 @@ export function QuoteForm({
   }
 
   function reset() {
-    setValues({ ...emptyValues, product: "" });
+    setValues({ ...emptyValues });
     setErrors({});
     setFileName("");
     setStatus("idle");
     setMessage("");
-    startedAt.current = Date.now();
   }
 
   if (status === "success") {
@@ -236,6 +247,19 @@ export function QuoteForm({
               <input id={id} name="product" type="text" value={values.product} onChange={set("product")}
                 className="field-input" aria-invalid={invalid} aria-describedby={describedBy} required maxLength={LIMITS.short}
                 placeholder="e.g. Floor cleaners, A4 printing paper" />
+            )}
+          </Field>
+          <Field name="category" label="Product category" error={errors.category}>
+            {({ id, describedBy, invalid }) => (
+              <select id={id} name="category" value={values.category}
+                onChange={(e) => setValues((v) => ({ ...v, category: e.target.value }))}
+                className="field-input" aria-invalid={invalid} aria-describedby={describedBy}>
+                <option value="">Select a category (optional)</option>
+                {categories.map((c) => (
+                  <option key={c.slug} value={c.name}>{c.name}</option>
+                ))}
+                <option value="Other">Other / not sure</option>
+              </select>
             )}
           </Field>
           <Field name="specifications" label="Product specifications" required error={errors.specifications}

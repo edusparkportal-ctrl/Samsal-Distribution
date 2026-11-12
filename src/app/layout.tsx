@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { MobileCtaBar } from "@/components/MobileCtaBar";
 import { JsonLd } from "@/components/ui";
 import { site } from "@/config/site";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         <main id="main">{children}</main>
         <Footer />
+        <MobileCtaBar />
       </body>
     </html>
   );

@@ -25,7 +25,16 @@ export function Photo({
   if (slot) {
     return (
       <div className={`relative overflow-hidden bg-grey ${className}`}>
-        <Image src={slot.src} alt={slot.alt} fill sizes={sizes} priority={priority} className="object-cover" />
+        <Image
+          src={slot.src}
+          alt={slot.alt}
+          fill
+          sizes={sizes}
+          priority={priority}
+          // SVG illustrations are already tiny vectors; raster optimisation applies to real photos only
+          unoptimized={slot.src.endsWith(".svg")}
+          className="object-cover"
+        />
       </div>
     );
   }

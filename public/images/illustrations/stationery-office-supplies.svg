@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Illustration of stationery and office supplies: notebooks, a ream of paper and a pen holder">
+  <rect width="800" height="600" fill="#E3F4F3"/>
+  <g stroke="#142D4E" stroke-opacity=".06"><path d="M0 120H800M0 240H800M0 360H800M0 480H800M160 0V600M320 0V600M480 0V600M640 0V600"/></g>
+  <rect y="470" width="800" height="130" fill="#D2E9E7"/>
+  <!-- ream of paper -->
+  <rect x="90" y="360" width="250" height="120" rx="6" fill="#fff" stroke="#CBD3DB" stroke-width="3"/>
+  <rect x="90" y="400" width="250" height="40" fill="#F2A541"/>
+  <rect x="120" y="412" width="110" height="9" rx="4" fill="#142D4E"/>
+  <rect x="120" y="426" width="70" height="7" rx="3" fill="#142D4E" opacity=".6"/>
+  <path d="M90 372h250" stroke="#E3E8ED" stroke-width="3"/>
+  <!-- notebooks stack -->
+  <rect x="150" y="300" width="230" height="60" rx="5" fill="#142D4E"/>
+  <rect x="150" y="320" width="230" height="8" fill="#fff" opacity=".18"/>
+  <rect x="170" y="240" width="210" height="60" rx="5" fill="#0B8F87"/>
+  <rect x="170" y="260" width="210" height="8" fill="#fff" opacity=".22"/>
+  <rect x="140" y="180" width="220" height="60" rx="5" fill="#F2A541"/>
+  <rect x="140" y="200" width="220" height="8" fill="#142D4E" opacity=".25"/>
+  <!-- ring-bound notebook upright -->
+  <rect x="440" y="250" width="150" height="230" rx="8" fill="#142D4E"/>
+  <g fill="#F4F6F8"><circle cx="440" cy="285" r="7"/><circle cx="440" cy="325" r="7"/><circle cx="440" cy="365" r="7"/><circle cx="440" cy="405" r="7"/><circle cx="440" cy="445" r="7"/></g>
+  <rect x="468" y="290" width="96" height="70" rx="4" fill="#fff"/>
+  <rect x="480" y="304" width="62" height="8" rx="4" fill="#142D4E"/>
+  <rect x="480" y="322" width="44" height="7" rx="3" fill="#CBD3DB"/>
+  <!-- pen holder -->
+  <path d="M630 380h110l-12 100H642z" fill="#0B8F87"/>
+  <rect x="640" y="440" width="90" height="10" fill="#fff" opacity=".25"/>
+  <g stroke-linecap="round" stroke-width="14"><path d="M655 380L640 250" stroke="#142D4E"/><path d="M685 380L688 235" stroke="#F2A541"/><path d="M715 380L735 260" stroke="#142D4E" /></g>
+  <path d="M640 250l-3-16" stroke="#F2A541" stroke-width="8" stroke-linecap="round"/>
+  <path d="M735 260l5-16" stroke="#F2A541" stroke-width="8" stroke-linecap="round"/>
+</svg>

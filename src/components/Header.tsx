@@ -32,7 +32,7 @@ export function Header() {
       >
         Skip to main content
       </a>
-      <div className="container-x flex h-16 items-center justify-between gap-4 sm:h-[72px]">
+      <div className="container-x flex h-16 items-center justify-between gap-3 sm:h-[72px] sm:gap-4">
         <Link href="/" aria-label="SAMSAL Supply & Distribution - home" className="shrink-0">
           <Logo priority className="h-9 w-auto sm:h-10" />
         </Link>

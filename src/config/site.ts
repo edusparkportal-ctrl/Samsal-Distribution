@@ -43,6 +43,17 @@ export const site = {
     x: null as string | null,
   },
 
+  // LEGAL STATUS: keep `reviewed: false` until a qualified Kenyan adviser has approved the Privacy Policy
+  // and Terms. While false, both pages show a draft banner, are marked noindex and are left out of the sitemap.
+  legal: {
+    reviewed: false,
+    draftDate: "12 November 2026",
+    // CONFIRM: details to be supplied by the business (not invented here)
+    registeredNumber: null as string | null,
+    registeredAddress: null as string | null,
+    dataProtectionRegistration: null as string | null,
+  },
+
   turnstileSiteKey: env(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
 } as const;
 

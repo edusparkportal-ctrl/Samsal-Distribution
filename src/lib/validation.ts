@@ -11,6 +11,7 @@ export type FormValues = {
   email: string;
   phone: string;
   product: string;
+  category: string;
   specifications: string;
   quantity: string;
   deliveryLocation: string;
@@ -34,6 +35,7 @@ export const emptyValues: FormValues = {
   email: "",
   phone: "",
   product: "",
+  category: "",
   specifications: "",
   quantity: "",
   deliveryLocation: "",
@@ -90,6 +92,7 @@ export function sanitiseValues(raw: Record<string, unknown>): FormValues {
     email: cleanSingleLine(raw.email, 254).toLowerCase(),
     phone: cleanSingleLine(raw.phone, 30),
     product: cleanSingleLine(raw.product, LIMITS.short),
+    category: cleanSingleLine(raw.category, LIMITS.short),
     specifications: clean(raw.specifications, LIMITS.long),
     quantity: cleanSingleLine(raw.quantity, LIMITS.short),
     deliveryLocation: cleanSingleLine(raw.deliveryLocation, LIMITS.short),

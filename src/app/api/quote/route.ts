@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { inspectAttachment } from "@/lib/file-check";
+import { MIN_FILL_MS, verifyToken } from "@/lib/form-token";
 import { rateLimit } from "@/lib/rate-limit";
 import {
+  LIMITS,
   escapeHtml,
   safeFilename,
   sanitiseValues,
   validate,
-  validateFile,
   type FormKind,
   type FormValues,
 } from "@/lib/validation";
@@ -13,8 +15,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MIN_FILL_MS = 3000; // humans take longer than 3s to fill a form
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Request body = file (max 4 MB) + text fields. Anything larger is rejected before parsing.
+const MAX_BODY_BYTES = LIMITS.maxFileBytes + 256 * 1024;
 
 function json(body: Record<string, unknown>, status = 200, headers?: Record<string, string>) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
@@ -23,6 +25,22 @@ function json(body: Record<string, unknown>, status = 200, headers?: Record<stri
 function clientIp(req: Request) {
   const fwd = req.headers.get("x-forwarded-for");
   return (fwd?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "unknown").trim();
+}
+
+/** Only accept browser submissions from our own site (blocks simple cross-site posting). */
+function originAllowed(req: Request) {
+  const origin = req.headers.get("origin");
+  if (!origin) return true; // non-browser clients / same-origin GET-style requests: other checks still apply
+  try {
+    const o = new URL(origin);
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+    if (o.host === host) return true;
+    const configured = process.env.NEXT_PUBLIC_SITE_URL;
+    if (configured && o.host === new URL(configured).host) return true;
+    return o.hostname === "localhost";
+  } catch {
+    return false;
+  }
 }
 
 async function verifyTurnstile(token: string, ip: string) {
@@ -51,6 +69,7 @@ function buildEmail(kind: FormKind, v: FormValues, fileName: string | null) {
           ["Email", v.email],
           ["Telephone", v.phone],
           ["Product / service", v.product],
+          ["Category", v.category || "-"],
           ["Specifications", v.specifications],
           ["Quantity", v.quantity],
           ["Delivery location", v.deliveryLocation],
@@ -66,6 +85,7 @@ function buildEmail(kind: FormKind, v: FormValues, fileName: string | null) {
           ["Message", v.message],
         ];
 
+  // Subject lines must be single-line; values are already stripped of newlines by sanitiseValues.
   const subject =
     kind === "quote"
       ? `Quote request: ${v.product} - ${v.organisation}`
@@ -92,7 +112,16 @@ function buildEmail(kind: FormKind, v: FormValues, fileName: string | null) {
 export async function POST(req: Request) {
   const ip = clientIp(req);
 
-  const rl = rateLimit(`quote:${ip}`);
+  // ---- Cheap rejections first (before reading the body) ----------------
+  if (!originAllowed(req)) {
+    return json({ ok: false, message: "This request was not accepted." }, 403);
+  }
+  const declaredLength = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return json({ ok: false, message: "Your submission is too large. Attachments are limited to 4 MB." }, 413);
+  }
+
+  const rl = await rateLimit(`quote:${ip}`);
   if (!rl.ok) {
     return json(
       { ok: false, message: "Too many submissions. Please wait a few minutes and try again, or contact us directly." },
@@ -109,15 +138,18 @@ export async function POST(req: Request) {
   }
 
   // ---- Spam protection -------------------------------------------------
-  // 1. Honeypot: real users never see or fill this field.
+  // 1. Honeypot: real users never see or fill this field. Bots get a silent "ok" so they do not adapt.
   if (String(form.get("website") ?? "") !== "") {
-    return json({ ok: true, message: "Thank you." }); // silently drop bots
+    return json({ ok: true, message: "Thank you." });
   }
-  // 2. Timing: bots submit instantly.
-  const startedAt = Number(form.get("startedAt"));
-  const age = Date.now() - startedAt;
-  if (!Number.isFinite(startedAt) || age < MIN_FILL_MS || age > MAX_AGE_MS) {
-    return json({ ok: false, message: "Please take a moment to review the form and submit again." }, 400);
+  // 2. Server-signed timing token (cannot be forged by the client). Skipped only if FORM_TOKEN_SECRET is unset.
+  const tokenResult = verifyToken(String(form.get("formToken") ?? ""));
+  if (tokenResult !== "ok" && tokenResult !== "skipped") {
+    const msg =
+      tokenResult === "too_fast"
+        ? "Please take a moment to review the form and submit again."
+        : "Your form session expired. Please refresh the page and submit again.";
+    return json({ ok: false, message: msg, retry: true, minWaitMs: MIN_FILL_MS }, 400);
   }
   // 3. Optional Cloudflare Turnstile
   if (!(await verifyTurnstile(String(form.get("cf-turnstile-response") ?? ""), ip))) {
@@ -133,11 +165,24 @@ export async function POST(req: Request) {
   const values = sanitiseValues(raw);
   const errors = validate(kind, values);
 
+  // Link-stuffing heuristic: free-text fields with many URLs are almost always spam.
+  const freeText = `${values.specifications} ${values.instructions} ${values.message}`;
+  if ((freeText.match(/https?:\/\//gi) ?? []).length > 3) {
+    return json({ ok: false, message: "Please remove links from your message and try again." }, 422);
+  }
+
   const fileEntry = form.get("attachment");
-  const file = fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
-  if (kind === "quote") {
-    const fileError = validateFile(file);
-    if (fileError) errors.file = fileError;
+  const file = kind === "quote" && fileEntry instanceof File && fileEntry.size > 0 ? fileEntry : null;
+  let attachmentBase64: string | null = null;
+  let attachmentName: string | null = null;
+  if (file) {
+    // Checks size, extension, declared MIME type AND actual file content (magic bytes).
+    const check = await inspectAttachment(file);
+    if (!check.ok) errors.file = check.error;
+    else {
+      attachmentName = safeFilename(file.name);
+      attachmentBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    }
   }
 
   if (Object.keys(errors).length > 0) {
@@ -151,15 +196,17 @@ export async function POST(req: Request) {
     .map((s) => s.trim())
     .filter(Boolean);
   const from = process.env.QUOTE_FROM_EMAIL || "SAMSAL Website <onboarding@resend.dev>";
-
-  const attachment = kind === "quote" ? file : null;
-  const { subject, html, text } = buildEmail(kind, values, attachment ? safeFilename(attachment.name) : null);
+  const { subject, html, text } = buildEmail(kind, values, attachmentName);
 
   if (!apiKey || to.length === 0) {
     if (process.env.NODE_ENV !== "production") {
-      // Development convenience: show what would have been sent.
+      // Development only: show what would have been sent. The response says plainly that nothing was emailed.
       console.log("\n[quote api] Email not configured - would have sent:\n", subject, "\n", text, "\n");
-      return json({ ok: true, message: "Thank you. (Development mode: email delivery is not configured.)" });
+      return json({
+        ok: true,
+        delivered: false,
+        message: "Development mode: email is not configured, so nothing was emailed. The enquiry was logged in the terminal.",
+      });
     }
     console.error("[quote api] RESEND_API_KEY or QUOTE_TO_EMAIL is not configured.");
     return json(
@@ -172,18 +219,11 @@ export async function POST(req: Request) {
     );
   }
 
+  let emailId: string | null = null;
   try {
-    const payload: Record<string, unknown> = {
-      from,
-      to,
-      reply_to: values.email,
-      subject,
-      html,
-      text,
-    };
-    if (attachment) {
-      const buf = Buffer.from(await attachment.arrayBuffer());
-      payload.attachments = [{ filename: safeFilename(attachment.name), content: buf.toString("base64") }];
+    const payload: Record<string, unknown> = { from, to, reply_to: values.email, subject, html, text };
+    if (attachmentBase64 && attachmentName) {
+      payload.attachments = [{ filename: attachmentName, content: attachmentBase64 }];
     }
 
     const res = await fetch("https://api.resend.com/emails", {
@@ -196,6 +236,13 @@ export async function POST(req: Request) {
       console.error("[quote api] Resend error", res.status, await res.text());
       return json({ ok: false, message: "We could not send your request. Please try again shortly." }, 502);
     }
+    // Success is reported only when the email provider accepted the message AND returned an id.
+    const data = (await res.json().catch(() => ({}))) as { id?: string };
+    emailId = typeof data.id === "string" && data.id ? data.id : null;
+    if (!emailId) {
+      console.error("[quote api] Resend returned no message id");
+      return json({ ok: false, message: "We could not confirm that your request was sent. Please try again." }, 502);
+    }
   } catch (err) {
     console.error("[quote api] Delivery failed", err);
     return json({ ok: false, message: "We could not send your request. Please try again shortly." }, 502);
@@ -204,6 +251,7 @@ export async function POST(req: Request) {
   // Nothing is stored: the enquiry exists only in the delivered email.
   return json({
     ok: true,
+    delivered: true,
     message:
       kind === "quote"
         ? "Thank you. Your quotation request has been received and we will respond by email or telephone."

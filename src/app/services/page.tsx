@@ -1,6 +1,7 @@
 import { ServiceIconView } from "@/components/Icons";
 import { CtaBanner, JsonLd, PageHero, SectionHeading } from "@/components/ui";
 import { processSteps, services } from "@/config/services";
+import { absoluteUrl, site } from "@/config/site";
 import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -11,8 +12,28 @@ export const metadata = pageMetadata({
 });
 
 export default function ServicesPage() {
+  // Services only, with no claims about licences, fleet, coverage beyond Nairobi, prices or ratings.
+  const serviceList = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "SAMSAL services",
+    itemListElement: services.map((s, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: {
+        "@type": "Service",
+        name: s.title,
+        description: s.summary,
+        url: absoluteUrl(`/services#${s.slug}`),
+        provider: { "@type": "Organization", name: site.legalName, url: site.url },
+        areaServed: { "@type": "City", name: "Nairobi" },
+      },
+    })),
+  };
+
   return (
     <>
+      <JsonLd data={serviceList} />
       <JsonLd data={breadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Services", path: "/services" }])} />
       <PageHero
         eyebrow="Services"

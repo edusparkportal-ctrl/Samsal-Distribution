@@ -6,16 +6,19 @@ export function pageMetadata({
   title,
   description,
   path,
+  noindex = false,
 }: {
   title: string;
   description: string;
   path: string;
+  noindex?: boolean;
 }): Metadata {
   const url = absoluteUrl(path);
   return {
     title,
     description,
     alternates: { canonical: url },
+    ...(noindex ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title: `${title} | ${site.legalName}`,
       description,

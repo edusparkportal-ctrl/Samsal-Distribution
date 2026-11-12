@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { absoluteUrl } from "@/config/site";
+import { absoluteUrl, site } from "@/config/site";
 
 const routes = [
   { path: "/", priority: 1 },
@@ -10,6 +10,10 @@ const routes = [
   { path: "/contact", priority: 0.7 },
   { path: "/quote", priority: 0.9 },
 ];
+// Legal pages are listed only once they have been reviewed and approved (see site.legal.reviewed).
+if (site.legal.reviewed) {
+  routes.push({ path: "/privacy", priority: 0.3 }, { path: "/terms", priority: 0.3 });
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();

@@ -7,7 +7,7 @@ import { placeholders, site } from "@/config/site";
 export function Footer() {
   const { contact } = site;
   return (
-    <footer className="on-dark bg-navy text-white/80">
+    <footer className="on-dark bg-navy pb-20 text-white/80 lg:pb-0">
       <div className="container-x grid gap-10 py-14 md:grid-cols-12">
         <div className="md:col-span-5">
           <Logo variant="full" onDark className="h-10 w-auto" />
@@ -38,7 +38,7 @@ export function Footer() {
           <ul className="space-y-2.5 text-sm">
             {categories.map((c) => (
               <li key={c.slug}>
-                <Link href={`/products#${c.slug}`} className="hover:text-white">
+                <Link href={`/products?category=${c.slug}`} className="hover:text-white">
                   {c.name}
                 </Link>
               </li>
@@ -65,7 +65,10 @@ export function Footer() {
           <p>
             &copy; {new Date().getFullYear()} {site.legalName}. All rights reserved.
           </p>
-          <p>Serving businesses and institutions in Nairobi, Kenya.</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link href="/privacy" className="hover:text-white">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-white">Terms of Service</Link>
+          </nav>
         </div>
       </div>
     </footer>

@@ -2,6 +2,7 @@ import { CheckCircle2 } from "lucide-react";
 import { QuoteForm } from "@/components/QuoteForm";
 import { PageHero } from "@/components/ui";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { getCategory } from "@/config/products";
 import { site } from "@/config/site";
 import { pageMetadata } from "@/lib/seo";
 
@@ -20,6 +21,10 @@ export default async function QuotePage({
   const sp = await searchParams;
   const raw = sp.product;
   const initialProduct = (Array.isArray(raw) ? raw[0] : raw)?.slice(0, 150) ?? "";
+  const rawCat = sp.category;
+  const catSlug = Array.isArray(rawCat) ? rawCat[0] : rawCat;
+  // Only known category slugs are accepted; anything else is ignored.
+  const initialCategory = (catSlug && getCategory(catSlug)?.name) || "";
 
   return (
     <>
@@ -32,7 +37,7 @@ export default async function QuotePage({
       <section className="section">
         <div className="container-x grid gap-10 lg:grid-cols-[1fr_340px] lg:gap-14">
           <div className="card p-5 sm:p-8">
-            <QuoteForm kind="quote" initialProduct={initialProduct} turnstileSiteKey={site.turnstileSiteKey} />
+            <QuoteForm kind="quote" initialProduct={initialProduct} initialCategory={initialCategory} turnstileSiteKey={site.turnstileSiteKey} />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-28 lg:self-start">
