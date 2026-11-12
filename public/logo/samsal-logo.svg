@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 212 54" role="img" aria-label="SAMSAL Supply &amp; Distribution">
+  <g transform="translate(0 3)">
+  <rect width="48" height="48" rx="9" fill="#142D4E"/>
+  <path d="M31 15H19.5a4.5 4.5 0 0 0 0 9h9a4.5 4.5 0 0 1 0 9H18" fill="none" stroke="#FFFFFF" stroke-width="4.6"/>
+  <path d="M30.5 9.5 L39 15 L30.5 20.5 Z" fill="#F2A541"/>
+  <circle cx="13.2" cy="33" r="3.4" fill="#0B8F87"/></g>
+  <g transform="translate(60 4)"><g transform="translate(0 0)"><path d="M22 2.4H8.2a5.8 5.8 0 0 0 0 11.6H13.8a5.8 5.8 0 0 1 0 11.6H0" fill="none" stroke="#142D4E" stroke-width="4.8"/></g><g transform="translate(26 0)"><path fill="#142D4E" fill-rule="evenodd" d="M0 28 8.6 0H13.4L22 28H17.2L15.55 22.6H6.45L4.8 28ZM11 7.8 14 17.6H8Z"/></g><g transform="translate(52 0)"><path fill="#142D4E" d="M0 28V0H5.4L11 12.2 16.6 0H22V28H17.2V10.6L12.6 20.6H9.4L4.8 10.6V28Z"/></g><g transform="translate(78 0)"><path d="M22 2.4H8.2a5.8 5.8 0 0 0 0 11.6H13.8a5.8 5.8 0 0 1 0 11.6H0" fill="none" stroke="#142D4E" stroke-width="4.8"/></g><g transform="translate(104 0)"><path fill="#142D4E" fill-rule="evenodd" d="M0 28 8.6 0H13.4L22 28H17.2L15.55 22.6H6.45L4.8 28ZM11 7.8 14 17.6H8Z"/></g><g transform="translate(130 0)"><path fill="#142D4E" d="M0 0H4.8V23.2H22V28H0Z"/></g></g>
+  <text x="60" y="48.5" font-family="Inter, Arial, Helvetica, sans-serif" font-size="8.4" font-weight="700" fill="#0B8F87" textLength="152" lengthAdjust="spacing">SUPPLY &amp; DISTRIBUTION</text>
+</svg>
