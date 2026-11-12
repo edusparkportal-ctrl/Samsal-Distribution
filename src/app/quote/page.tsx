@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { QuoteForm } from "@/components/QuoteForm";
 import { PageHero } from "@/components/ui";
@@ -7,19 +8,14 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Request a Quote",
-  description:
-    "Request a quotation from SAMSAL Supply & Distribution. Tell us the products, quantities and delivery details you need in Nairobi or across Kenya.",
+  description: "Request a quotation from SAMSAL Supply & Distribution. Tell us the products, quantities and delivery details you need in Nairobi or across Kenya.",
   path: "/quote",
 });
 
-export default async function QuotePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
+export default async function QuotePage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const sp = await searchParams;
-  const raw = sp.product;
-  const initialProduct = (Array.isArray(raw) ? raw[0] : raw)?.slice(0, 150) ?? "";
+  const initialProduct = (Array.isArray(sp.product) ? sp.product[0] : sp.product)?.slice(0, 150) ?? "";
+  const initialCategory = (Array.isArray(sp.category) ? sp.category[0] : sp.category)?.slice(0, 150) ?? "";
 
   return (
     <>
@@ -29,16 +25,17 @@ export default async function QuotePage({
         title="Tell us what you need"
         intro="Complete the form and we will respond with a clear quotation. The more detail you give, the faster and more accurate our quote."
       />
+
       <section className="section">
         <div className="container-x grid gap-10 lg:grid-cols-[1fr_340px] lg:gap-14">
           <div className="card p-5 sm:p-8">
-            <QuoteForm kind="quote" initialProduct={initialProduct} turnstileSiteKey={site.turnstileSiteKey} />
+            <QuoteForm kind="quote" initialProduct={initialProduct} initialCategory={initialCategory} turnstileSiteKey={site.turnstileSiteKey} />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-28 lg:self-start">
             <div className="card p-6">
-              <h2 className="text-lg">What happens next</h2>
-              <ol className="mt-4 space-y-3 text-sm">
+              <h2 className="text-lg font-bold text-navy">What happens next</h2>
+              <ol className="mt-4 space-y-3 text-sm text-slate-600">
                 {[
                   "We review your requirement.",
                   "We source products to your specification.",
@@ -53,8 +50,8 @@ export default async function QuotePage({
               </ol>
             </div>
             <div className="card p-6">
-              <h2 className="text-lg">Prefer to chat?</h2>
-              <p className="mt-2 text-sm">
+              <h2 className="text-lg font-bold text-navy">Prefer to chat?</h2>
+              <p className="mt-2 text-sm text-slate-600">
                 Use WhatsApp for a quick question. For a formal quotation please use the form.
               </p>
               <div className="mt-4">
