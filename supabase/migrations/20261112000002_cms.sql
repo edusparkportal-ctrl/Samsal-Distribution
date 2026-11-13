@@ -40,6 +40,7 @@ create table public.company_settings (
   registered_name       text not null,
   brand_name            text not null,
   tagline               text,
+  promise               text,
   description           text,
   mission               text,
   vision                text,
@@ -152,7 +153,12 @@ create table public.product_categories (
   id          uuid primary key default gen_random_uuid(),
   slug        text not null unique check (slug ~ '^[a-z0-9][a-z0-9-]{1,60}$'),
   name        text not null,
+  summary     text,
   description text,
+  icon        text,                    -- name from the fixed icon set, never raw markup
+  seo_description text check (seo_description is null or length(seo_description) <= 200),
+  fallback_image  text,                -- path under /public until a photo is uploaded
+  image_alt   text,
   sort_order  integer not null default 0,
   is_active   boolean not null default true,
   created_at  timestamptz not null default now(),
@@ -168,6 +174,8 @@ create table public.products (
   description   text,
   photo_media_id uuid references public.media_assets(id) on delete set null,
   fallback_image text,                 -- path under /public used until a photo is uploaded
+  image_alt     text,
+  packaging     text,                  -- null = "Pack sizes confirmed on quotation"
   unit_id       uuid references public.units(id) on delete set null,
   status        text not null default 'draft' check (status in ('draft','published','archived')),
   is_featured   boolean not null default false,
@@ -239,7 +247,45 @@ create table public.industries (
   updated_at  timestamptz not null default now()
 );
 
--- Featured product sets are driven by products.is_featured; these two tables are not needed.
+create table public.industry_needs (
+  id          uuid primary key default gen_random_uuid(),
+  industry_id uuid not null references public.industries(id) on delete cascade,
+  text        text not null check (length(text) between 1 and 300),
+  sort_order  integer not null default 0
+);
+create index industry_needs_industry_idx on public.industry_needs(industry_id);
+
+create table public.industry_categories (
+  industry_id uuid not null references public.industries(id) on delete cascade,
+  category_id uuid not null references public.product_categories(id) on delete cascade,
+  sort_order  integer not null default 0,
+  primary key (industry_id, category_id)
+);
+
+-- "How it works" steps shown on the Services page
+create table public.process_steps (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null check (length(title) between 1 and 80),
+  body        text not null check (length(body) between 1 and 300),
+  sort_order  integer not null default 0,
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- Public downloads. A row with no file is shown as "available on request".
+create table public.site_documents (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null check (length(title) between 1 and 120),
+  description text,
+  media_id    uuid references public.media_assets(id) on delete set null,   -- must be a public-media file to be downloadable
+  sort_order  integer not null default 0,
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- Featured products are driven by products.is_featured.
 
 -- SEO per page
 create table public.seo_pages (
@@ -258,7 +304,7 @@ declare t text;
 begin
   foreach t in array array[
     'media_assets','company_values','contact_channels','staff_members','social_links',
-    'announcements','product_categories','products','product_variants','services','industries','company_settings','homepage_settings','seo_pages'
+    'announcements','product_categories','products','product_variants','services','industries','company_settings','homepage_settings','seo_pages','process_steps','site_documents'
   ] loop
     execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()', t || '_updated', t);
   end loop;

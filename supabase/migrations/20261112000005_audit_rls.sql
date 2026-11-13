@@ -104,7 +104,7 @@ declare t text;
 begin
   foreach t in array array[
     'company_settings','company_values','contact_channels','staff_members','social_links','homepage_settings',
-    'announcements','product_categories','products','services','industries','seo_pages','media_assets','modules',
+    'announcements','product_categories','products','services','industries','process_steps','site_documents','seo_pages','media_assets','modules',
     'roles','role_permissions','quotations','quotation_items','suppliers','supplier_quotes','purchase_orders',
     'purchase_order_items','warehouses','sales_orders','deliveries','tenders'
   ] loop
@@ -231,6 +231,10 @@ begin
     ('services',              'is_active',                                                                         'content.manage'),
     ('service_points',        'exists (select 1 from public.services s where s.id = service_id and s.is_active)',  'content.manage'),
     ('industries',            'is_active',                                                                         'content.manage'),
+    ('industry_needs',        'exists (select 1 from public.industries i where i.id = industry_id and i.is_active)', 'content.manage'),
+    ('industry_categories',   'exists (select 1 from public.industries i where i.id = industry_id and i.is_active)', 'content.manage'),
+    ('process_steps',         'is_active',                                                                         'content.manage'),
+    ('site_documents',        'is_active',                                                                         'content.manage'),
     ('seo_pages',             'true',                                                                              'content.manage'),
     ('units',                 'true',                                                                              'products.manage'),
     ('modules',               'true',                                                                              'settings.manage')
