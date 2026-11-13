@@ -1,12 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
-import { MobileCtaBar } from "@/components/MobileCtaBar";
-import { JsonLd } from "@/components/ui";
 import { site } from "@/config/site";
-import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
@@ -41,12 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-KE" className={inter.variable}>
       <body>
-        <JsonLd data={organizationJsonLd()} />
-        <JsonLd data={websiteJsonLd()} />
-        <Header />
-        <main id="main">{children}</main>
-        <Footer />
-        <MobileCtaBar />
+        {children}
       </body>
     </html>
   );

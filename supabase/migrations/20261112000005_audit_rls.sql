@@ -78,7 +78,7 @@ begin
   if tg_op = 'UPDATE' then
     select coalesce(array_agg(key order by key), '{}') into changed
     from jsonb_each(n) e
-    where key <> 'updated_at' and (o -> key) is distinct from e.value;
+    where key not in ('updated_at','last_login_at') and (o -> key) is distinct from e.value;
     if array_length(changed, 1) is null then return new; end if;   -- nothing meaningful changed
   end if;
 

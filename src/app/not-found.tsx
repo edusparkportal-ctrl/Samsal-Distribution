@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { SiteChrome } from "@/components/SiteChrome";
 
 export default function NotFound() {
   return (
+    <SiteChrome>
     <section className="section">
       <div className="container-x max-w-2xl py-10 text-center">
         <p className="eyebrow">Error 404</p>
@@ -13,5 +15,6 @@ export default function NotFound() {
         </div>
       </div>
     </section>
+    </SiteChrome>
   );
 }

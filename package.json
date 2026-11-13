@@ -1,8 +1,8 @@
 {
   "name": "samsal-website",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Corporate website for SAMSAL Supply & Distribution Limited",
+  "description": "Corporate website and business management platform for SAMSAL Supply & Distribution Limited",
   "engines": {
     "node": ">=20.9.0"
   },
@@ -11,13 +11,18 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "brand:assets": "node scripts/generate-brand-assets.cjs"
+    "brand:assets": "node scripts/generate-brand-assets.cjs",
+    "db:seed:generate": "tsx scripts/generate-seed.ts",
+    "db:test": "bash supabase/tests/run-local.sh"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.469.0",
     "next": "^15.5.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -27,6 +32,7 @@
     "postcss": "^8.4.49",
     "sharp": "^0.33.5",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.2"
   }
 }
