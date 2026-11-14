@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { inspectAttachment } from "@/lib/file-check";
 import { MIN_FILL_MS, verifyToken } from "@/lib/form-token";
+import { saveWebsiteEnquiry } from "@/lib/enquiries";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   LIMITS,
@@ -189,6 +190,18 @@ export async function POST(req: Request) {
     return json({ ok: false, message: "Please correct the highlighted fields.", errors }, 422);
   }
 
+  // ---- Store in the CRM (never throws; null when the database is not configured or unavailable) ----
+  const reference = await saveWebsiteEnquiry(kind, values, attachmentName);
+  const saved = reference !== null;
+  const thanks = {
+    ok: true,
+    message:
+      kind === "quote"
+        ? "Thank you. Your quotation request has been received and we will respond by email or telephone."
+        : "Thank you. Your enquiry has been received and we will be in touch.",
+    ...(reference ? { reference } : {}),
+  };
+
   // ---- Deliver ---------------------------------------------------------
   const apiKey = process.env.RESEND_API_KEY;
   const to = (process.env.QUOTE_TO_EMAIL ?? "")
@@ -196,9 +209,12 @@ export async function POST(req: Request) {
     .map((s) => s.trim())
     .filter(Boolean);
   const from = process.env.QUOTE_FROM_EMAIL || "SAMSAL Website <onboarding@resend.dev>";
-  const { subject, html, text } = buildEmail(kind, values, attachmentName);
+  const built = buildEmail(kind, values, attachmentName);
+  const subject = reference ? `[${reference}] ${built.subject}` : built.subject;
+  const { html, text } = built;
 
   if (!apiKey || to.length === 0) {
+    if (saved) return json({ ...thanks, delivered: false });
     if (process.env.NODE_ENV !== "production") {
       // Development only: show what would have been sent. The response says plainly that nothing was emailed.
       console.log("\n[quote api] Email not configured - would have sent:\n", subject, "\n", text, "\n");
@@ -234,6 +250,7 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       console.error("[quote api] Resend error", res.status, await res.text());
+      if (saved) return json({ ...thanks, delivered: false });
       return json({ ok: false, message: "We could not send your request. Please try again shortly." }, 502);
     }
     // Success is reported only when the email provider accepted the message AND returned an id.
@@ -241,20 +258,14 @@ export async function POST(req: Request) {
     emailId = typeof data.id === "string" && data.id ? data.id : null;
     if (!emailId) {
       console.error("[quote api] Resend returned no message id");
+      if (saved) return json({ ...thanks, delivered: false });
       return json({ ok: false, message: "We could not confirm that your request was sent. Please try again." }, 502);
     }
   } catch (err) {
     console.error("[quote api] Delivery failed", err);
+    if (saved) return json({ ...thanks, delivered: false });
     return json({ ok: false, message: "We could not send your request. Please try again shortly." }, 502);
   }
 
-  // Nothing is stored: the enquiry exists only in the delivered email.
-  return json({
-    ok: true,
-    delivered: true,
-    message:
-      kind === "quote"
-        ? "Thank you. Your quotation request has been received and we will respond by email or telephone."
-        : "Thank you. Your enquiry has been received and we will be in touch.",
-  });
+  return json({ ...thanks, delivered: true });
 }

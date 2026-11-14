@@ -134,6 +134,20 @@ select tst.count_is($$select count(*) from public.quotations$$, 1, 'sales sees q
 select tst.works($$delete from public.quotations where status='draft'$$, 'draft quotation can be deleted');
 select tst.works($$insert into public.quotations(number,status) values ('SAM-Q-TEST-1','sent')$$, 'sent quotation inserted');
 select tst.affects($$delete from public.quotations where status='sent'$$, 0, 'sent quotation cannot be deleted');
+-- quotation guards (migration 0008)
+select tst.fails($$insert into public.quotation_items(quotation_id,line_no,description,quantity,unit_price) select id,1,'late line',1,1 from public.quotations where number='SAM-Q-TEST-1'$$, 'cannot add lines to an issued quotation');
+select tst.fails($$update public.quotations set payment_terms='Free' where number='SAM-Q-TEST-1'$$, 'cannot change terms of an issued quotation');
+select tst.works($$update public.quotations set decision_note='noted' where number='SAM-Q-TEST-1'$$, 'decision note stays editable after issue');
+select tst.works($$insert into public.quotations(number,status) values ('SAM-Q-TEST-2','draft')$$, 'second draft created');
+select tst.works($$insert into public.quotation_items(quotation_id,line_no,description,quantity,unit_price) select id,1,'draft line',1,5 from public.quotations where number='SAM-Q-TEST-2'$$, 'draft accepts lines');
+select tst.works($$update public.quotation_items set unit_price=6 where quotation_id=(select id from public.quotations where number='SAM-Q-TEST-2')$$, 'draft lines editable');
+select tst.works($$update public.quotations set status='sent' where number='SAM-Q-TEST-2'$$, 'draft -> sent');
+select tst.fails($$update public.quotations set status='draft' where number='SAM-Q-TEST-2'$$, 'sent cannot return to draft');
+select tst.fails($$update public.quotation_items set unit_price=7 where quotation_id=(select id from public.quotations where number='SAM-Q-TEST-2')$$, 'sent quotation lines frozen');
+select tst.fails($$delete from public.quotation_items where quotation_id=(select id from public.quotations where number='SAM-Q-TEST-2')$$, 'sent quotation lines cannot be deleted');
+select tst.works($$update public.quotations set status='accepted' where number='SAM-Q-TEST-2'$$, 'sent -> accepted');
+select tst.ok((select decision='accepted' and decision_at is not null and decision_by = auth.uid() from public.quotations where number='SAM-Q-TEST-2'), 'acceptance records decision, time and user');
+select tst.fails($$update public.quotations set status='declined' where number='SAM-Q-TEST-2'$$, 'accepted quotation cannot change status');
 select tst.fails($$insert into storage.objects(bucket_id,name) values ('public-media','x.png')$$, 'sales cannot upload website media');
 select tst.works($$insert into storage.objects(bucket_id,name) values ('private-docs','quote.pdf')$$, 'sales can upload quotation documents');
 

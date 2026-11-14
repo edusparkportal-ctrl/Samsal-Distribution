@@ -74,13 +74,16 @@ export default function PrivacyPage() {
 
       <LegalSection id="handling" title="4. How your information is handled and shared">
         <p>
-          Form submissions are sent to SAMSAL by email. The website does not keep a database of submissions or store
-          uploaded attachments on its own servers. We share information only with service providers that help us
+          Form submissions are sent to SAMSAL by email and, where our customer database is switched on, are also
+          saved in it (your contact details, the products and quantities you ask about, and your message) so our team
+          can respond and follow up. Uploaded attachments are emailed to us and are not stored in the database; only
+          the file name is recorded. We share information only with service providers that help us
           operate the website and deliver your enquiry:
         </p>
         <LegalList
           items={[
             "Vercel, which hosts the website and processes requests.",
+            "Supabase, which provides the database and file storage used for our customer records and staff sign-in.",
             "Resend, which delivers form submissions (including attachments) to our business inbox.",
             "Upstash, if enabled, which stores IP-based rate-limit counters for a short time.",
             "Cloudflare Turnstile, if enabled, which checks that a submission comes from a person.",
