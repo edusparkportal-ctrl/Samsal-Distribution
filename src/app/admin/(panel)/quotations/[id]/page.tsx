@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/admin/Flash";
+import { RecordDocuments } from "@/components/admin/RecordDocuments";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { Badge, Notice, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
@@ -73,6 +74,7 @@ export default async function QuotationPage({ params, searchParams }: { params: 
           )}
         </div>
       </div>
+      <RecordDocuments entityType="quotation" entityId={id} canManage={can} backPath={`/admin/quotations/${id}`} />
     </>
   );
 }

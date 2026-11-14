@@ -56,10 +56,12 @@ function Control({ f, row, lookups }: { f: Field; row: Row | null; lookups: Look
         </div>
       );
     }
+    case "date":
+      return <input id={id} name={f.name} type="date" defaultValue={cur ?? ""} className="field-input" {...req} />;
     case "datetime":
       return <input id={id} name={f.name} type="datetime-local" defaultValue={toNairobiInput(cur)} className="field-input" />;
     case "number":
-      return <input id={id} name={f.name} type="number" step={1} min={f.min} max={f.max} defaultValue={cur ?? f.default ?? ""} className="field-input" {...req} />;
+      return <input id={id} name={f.name} type={f.decimal ? "text" : "number"} inputMode={f.decimal ? "decimal" : undefined} step={f.decimal ? undefined : 1} min={f.min} max={f.max} defaultValue={cur ?? f.default ?? ""} className="field-input" {...req} />;
     case "email":
       return <input id={id} name={f.name} type="email" maxLength={254} defaultValue={cur ?? ""} className="field-input" {...req} />;
     case "url":

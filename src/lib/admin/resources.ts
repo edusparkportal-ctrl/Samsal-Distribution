@@ -12,6 +12,7 @@
 import type { Permission } from "@/lib/auth/permissions";
 import type { ModuleKey } from "@/lib/modules";
 import { CATEGORY_ICONS, SERVICE_ICONS } from "@/lib/content/types";
+import { OPS_RESOURCES } from "./resources-ops";
 
 type Base = { name: string; label: string; col?: string; required?: boolean; help?: string; section?: string };
 export type Field =
@@ -19,7 +20,8 @@ export type Field =
   | (Base & { type: "url"; httpsOnly?: boolean; allowInternal?: boolean; max?: number })
   | (Base & { type: "textarea"; max?: number; rows?: number })
   | (Base & { type: "checkbox"; default?: boolean })
-  | (Base & { type: "number"; min?: number; max?: number; default?: number })
+  | (Base & { type: "number"; min?: number; max?: number; default?: number; decimal?: boolean })
+  | (Base & { type: "date" })
   | (Base & { type: "select"; options: { value: string; label: string }[]; default?: string })
   | (Base & { type: "relation"; table: string; labelCol: string; orderBy?: string; filter?: [string, unknown] })
   | (Base & { type: "media"; kind: "image" | "document" })
@@ -27,9 +29,9 @@ export type Field =
 
 export type ChildList = {
   name: string; label: string; table: string; fk: string; help: string;
-  mode: "lines" | "pairs"; textCol?: string; labelCol?: string; valueCol?: string; max?: number;
+  mode: "lines" | "pairs" | "items"; textCol?: string; labelCol?: string; valueCol?: string; max?: number;
 };
-export type LinkList = { name: string; label: string; table: string; fk: string; other: string; optionsTable: string; optionLabel: string };
+export type LinkList = { name: string; label: string; table: string; fk: string; other: string; optionsTable: string; optionLabel: string; noSort?: boolean };
 
 export type ResourceDef = {
   key: string;
@@ -43,7 +45,7 @@ export type ResourceDef = {
   pk: "id" | "path";
   singleton?: boolean;
   fields: Field[];
-  columns: { key: string; label: string; badge?: Record<string, "teal" | "grey" | "amber" | "green" | "red"> }[];
+  columns: { key: string; label: string; badge?: Record<string, "teal" | "grey" | "amber" | "green" | "red">; lookup?: { table: string; labelCol: string } }[];
   orderBy: string;
   sortable?: boolean;            // has sort_order and Up/Down controls
   activeColumn?: "is_active" | "enabled";
@@ -53,10 +55,20 @@ export type ResourceDef = {
   slugFrom?: string;             // field name used to derive an empty slug
   filterStatus?: boolean;        // list can be filtered with ?status=
   newLabel?: string;
+  // ---- business-module resources (suppliers, orders, ...) ----
+  base?: string;                 // URL base, default /admin/website
+  viewPermission?: Permission;   // may open the list; `permission` is then the one needed to change things
+  publicSite?: boolean;          // false: saving does not purge the public website cache
+  createdBy?: string;            // column that receives the signed-in user's id on create
+  createOnly?: boolean;          // append-only records (no edit, no delete)
+  noDelete?: boolean;
+  documentType?: "supplier" | "supplier_quote" | "purchase_order" | "tender" | "delivery"; // attach private documents on the edit page
+  statusOptions?: { value: string; label: string }[]; // list filter chips
+  beforeSave?: (values: Record<string, unknown>) => void;
 };
 
 
-export const RESOURCES: Record<string, ResourceDef> = {
+const WEBSITE: Record<string, ResourceDef> = {
   company: {
     key: "company", route: "company", table: "company_settings", label: "Company", singular: "Company information", pk: "id", singleton: true,
     description: "Your registered name, brand, description, address, hours and quotation settings. Anything left blank is simply not shown on the website.",
@@ -274,4 +286,7 @@ export const RESOURCES: Record<string, ResourceDef> = {
   },
 };
 
-export const RESOURCE_BY_ROUTE: Record<string, ResourceDef> = Object.fromEntries(Object.values(RESOURCES).map((r) => [r.route, r]));
+export const RESOURCES: Record<string, ResourceDef> = { ...WEBSITE, ...OPS_RESOURCES };
+/** The /admin/website/[resource] pages serve only the website resources. */
+export const RESOURCE_BY_ROUTE: Record<string, ResourceDef> = Object.fromEntries(Object.values(WEBSITE).map((r) => [r.route, r]));
+export const resourceBase = (d: ResourceDef) => `${d.base ?? "/admin/website"}/${d.route}`;

@@ -80,6 +80,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     icon: "warehouse",
     items: [
       { label: "Warehouses", href: "/admin/inventory/warehouses", permission: "inventory.view" },
+      { label: "Stock items", href: "/admin/inventory/variants", permission: "inventory.view" },
       { label: "Stock movements", href: "/admin/inventory/movements", permission: "inventory.view" },
       { label: "Stock balances", href: "/admin/inventory/balances", permission: "inventory.view" },
     ],

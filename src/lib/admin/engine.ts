@@ -55,12 +55,17 @@ export function parseFields(def: ResourceDef, fd: FormData): Parsed {
         continue;
       case "number": {
         if (v === "") { if (f.required) bad("required"); else if (f.default !== undefined) values[col] = f.default; else values[col] = null; continue; }
-        const n = Number(v);
-        if (!Number.isInteger(n)) { bad("enter a whole number"); continue; }
+        const n = Number(v.replace(/,/g, ""));
+        if (f.decimal ? !Number.isFinite(n) || Math.round(n * 1000) / 1000 !== n : !Number.isInteger(n)) { bad(f.decimal ? "enter a number (up to 3 decimals)" : "enter a whole number"); continue; }
         if ((f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) { bad(`must be between ${f.min ?? "-∞"} and ${f.max ?? "∞"}`); continue; }
         values[col] = n;
         continue;
       }
+      case "date":
+        if (v === "") { if (f.required) bad("required"); else values[col] = null; continue; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v))) { bad("enter a valid date"); continue; }
+        values[col] = v;
+        continue;
       case "select":
         if (v === "" && f.default !== undefined) v = f.default;
         if (v === "") { if (f.required) bad("choose an option"); else values[col] = null; continue; }
@@ -119,11 +124,20 @@ export type ChildRow = Record<string, string | number>;
 export function parseChildLines(c: ChildList, input: string): { rows: ChildRow[]; errors: string[] } {
   const errors: string[] = [];
   const lines = input.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const max = c.max ?? 30;
+  const max = c.max ?? (c.mode === "items" ? 200 : 30);
   if (lines.length > max) errors.push(`${c.label}: at most ${max} lines`);
   const rows: ChildRow[] = [];
   lines.slice(0, max).forEach((line, i) => {
-    if (c.mode === "lines") {
+    if (c.mode === "items") {
+      // "description | quantity | unit price"
+      const parts = line.split("|").map((p) => p.trim());
+      const qty = Number((parts[1] ?? "").replace(/,/g, "")), price = Number((parts[2] ?? "").replace(/,/g, ""));
+      if (parts.length < 3 || !parts[0]) return void errors.push(`${c.label}, line ${i + 1}: write it as “description | quantity | unit price”`);
+      if (parts[0].length > 500) return void errors.push(`${c.label}, line ${i + 1}: description too long`);
+      if (!Number.isFinite(qty) || qty <= 0 || qty > 1e9) return void errors.push(`${c.label}, line ${i + 1}: quantity must be above zero`);
+      if (!Number.isFinite(price) || price < 0 || price > 1e10) return void errors.push(`${c.label}, line ${i + 1}: unit price must be zero or more`);
+      rows.push({ description: parts[0], quantity: Math.round(qty * 1000) / 1000, unit_price: Math.round(price * 100) / 100, line_no: i + 1 });
+    } else if (c.mode === "lines") {
       if (line.length > 300) return void errors.push(`${c.label}, line ${i + 1}: at most 300 characters`);
       rows.push({ [c.textCol!]: line, sort_order: (i + 1) * 10 });
     } else {
@@ -139,7 +153,7 @@ export function parseChildLines(c: ChildList, input: string): { rows: ChildRow[]
 }
 
 export const formatChildLines = (c: ChildList, rows: Record<string, unknown>[]): string =>
-  rows.map((r) => (c.mode === "lines" ? String(r[c.textCol!] ?? "") : `${r[c.labelCol!]}: ${r[c.valueCol!]}`)).join("\n");
+  rows.map((r) => (c.mode === "items" ? `${r.description} | ${Number(r.quantity)} | ${Number(r.unit_price)}` : c.mode === "lines" ? String(r[c.textCol!] ?? "") : `${r[c.labelCol!]}: ${r[c.valueCol!]}`)).join("\n");
 
 /** Parse a list of selected uuids from repeated checkbox values. */
 export const parseUuidList = (fd: FormData, name: string): string[] =>

@@ -3,17 +3,18 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { checkPermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { RESOURCES, type ResourceDef } from "@/lib/admin/resources";
+import { RESOURCES, resourceBase, type ResourceDef } from "@/lib/admin/resources";
 import { parseChildLines, parseFields, parseUuidList } from "@/lib/admin/engine";
 import { dbError, flash, str } from "@/lib/admin/forms";
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const listPath = (d: ResourceDef) => `/admin/website/${d.route}`;
+const listPath = (d: ResourceDef) => resourceBase(d);
 const editPath = (d: ResourceDef, id: string) => `${listPath(d)}?edit=${encodeURIComponent(id)}`;
 
 /** Make saved changes visible on the public site straight away. */
-function purgePublicSite() {
+function purgePublicSite(def?: ResourceDef) {
+  if (def && def.publicSite === false) return;
   revalidateTag("cms");
   revalidatePath("/", "layout");
 }
@@ -30,10 +31,14 @@ export async function saveResource(formData: FormData) {
   const { def, ctx } = await authorise(formData);
   const id = str(formData, "id", 200);
   const isNew = !def.singleton && id === "";
+  if (def.createOnly && !isNew) flash(listPath(def), "error", "These records cannot be edited. Record an adjustment instead.");
   const back = (kind: "ok" | "error", msg: string, rowId?: string) =>
     flash(def.singleton ? listPath(def) : rowId ? editPath(def, rowId) : isNew ? `${listPath(def)}?new=1` : editPath(def, id), kind, msg);
 
   const { values, errors } = parseFields(def, formData);
+  if (def.beforeSave && errors.length === 0) {
+    try { def.beforeSave(values); } catch (e) { errors.push(e instanceof Error ? e.message : "Invalid values."); }
+  }
   const childParsed = (def.children ?? []).map((c) => ({ c, ...parseChildLines(c, str(formData, `child_${c.name}`, 20000)) }));
   errors.push(...childParsed.flatMap((p) => p.errors));
   if (errors.length) back("error", errors.slice(0, 4).join(" · ") + (errors.length > 4 ? ` · and ${errors.length - 4} more` : ""));
@@ -41,7 +46,7 @@ export async function saveResource(formData: FormData) {
   const sb = await createSupabaseServerClient();
   const stamp: Row = {};
   if (def.singleton) stamp.updated_by = ctx.userId;
-  if (def.table === "products" && isNew) stamp.created_by = ctx.userId;
+  if ((def.table === "products" || def.createdBy) && isNew) stamp[def.createdBy ?? "created_by"] = ctx.userId;
 
   let rowId = id;
   if (def.singleton) {
@@ -67,14 +72,20 @@ export async function saveResource(formData: FormData) {
   for (const { c, rows } of childParsed) {
     if (def.singleton) continue;
     const { data: old } = await sb.from(c.table).select("id").eq(c.fk, rowId);
+    // Numbered lines are unique per parent: park the new set at +1000, then renumber after removing the old rows.
+    const OFFSET = 1000;
     if (rows.length) {
-      const { error } = await sb.from(c.table).insert(rows.map((r) => ({ ...r, [c.fk]: rowId })));
+      const { error } = await sb.from(c.table).insert(rows.map((r) => ({ ...r, [c.fk]: rowId, ...(c.mode === "items" ? { line_no: Number(r.line_no) + OFFSET } : {}) })));
       if (error) back("error", `Saved, but “${c.label}” could not be updated: ${dbError(error)}`, rowId);
     }
     const oldIds = (old ?? []).map((o: Row) => o.id);
     if (oldIds.length) {
       const { error } = await sb.from(c.table).delete().in("id", oldIds);
       if (error) back("error", `Saved, but old “${c.label}” entries could not be removed: ${dbError(error)}`, rowId);
+    }
+    if (c.mode === "items" && rows.length) {
+      const { data: fresh } = await sb.from(c.table).select("id, line_no").eq(c.fk, rowId);
+      for (const f of (fresh ?? []) as Row[]) await sb.from(c.table).update({ line_no: Number(f.line_no) - OFFSET }).eq("id", f.id);
     }
   }
 
@@ -86,7 +97,7 @@ export async function saveResource(formData: FormData) {
     const add = [...wanted].filter((x) => !have.has(x));
     const remove = [...have].filter((x) => !wanted.has(x));
     if (add.length) {
-      const { error } = await sb.from(l.table).insert(add.map((o, i) => ({ [l.fk]: rowId, [l.other]: o, sort_order: (have.size + i + 1) * 10 })));
+      const { error } = await sb.from(l.table).insert(add.map((o, i) => ({ [l.fk]: rowId, [l.other]: o, ...(l.noSort ? {} : { sort_order: (have.size + i + 1) * 10 }) })));
       if (error) back("error", `Saved, but “${l.label}” could not be updated: ${dbError(error)}`, rowId);
     }
     if (remove.length) {
@@ -95,7 +106,7 @@ export async function saveResource(formData: FormData) {
     }
   }
 
-  purgePublicSite();
+  purgePublicSite(def);
   revalidatePath(listPath(def));
   flash(def.singleton ? listPath(def) : editPath(def, rowId), "ok", `${def.singular} saved. The website now shows the change.`);
 }
@@ -103,13 +114,14 @@ export async function saveResource(formData: FormData) {
 export async function deleteResource(formData: FormData) {
   const { def } = await authorise(formData);
   const id = str(formData, "id", 200);
-  if (def.singleton || !id) flash(listPath(def), "error", "That cannot be deleted.");
+  if (def.singleton || !id || def.noDelete || def.createOnly) flash(listPath(def), "error", "That cannot be deleted.");
   const sb = await createSupabaseServerClient();
-  const { error } = def.softDelete
-    ? await sb.from(def.table).update({ [def.softDelete]: new Date().toISOString() }).eq(def.pk, id)
-    : await sb.from(def.table).delete().eq(def.pk, id);
+  const { data: gone, error } = def.softDelete
+    ? await sb.from(def.table).update({ [def.softDelete]: new Date().toISOString() }).eq(def.pk, id).select(def.pk)
+    : await sb.from(def.table).delete().eq(def.pk, id).select(def.pk);
   if (error) flash(listPath(def), "error", dbError(error));
-  purgePublicSite();
+  if (!gone?.length) flash(listPath(def), "error", "Nothing was deleted. You may not have permission to delete this.");
+  purgePublicSite(def);
   revalidatePath(listPath(def));
   flash(listPath(def), "ok", `${def.singular} deleted.`);
 }
@@ -121,7 +133,7 @@ export async function setResourceActive(formData: FormData) {
   const sb = await createSupabaseServerClient();
   const { error } = await sb.from(def.table).update({ [def.activeColumn!]: str(formData, "to", 5) === "true" }).eq(def.pk, id);
   if (error) flash(listPath(def), "error", dbError(error));
-  purgePublicSite();
+  purgePublicSite(def);
   revalidatePath(listPath(def));
   flash(listPath(def), "ok", "Updated.");
 }
@@ -149,7 +161,7 @@ export async function moveResource(formData: FormData) {
       if (e) flash(listPath(def), "error", dbError(e));
     }
   }
-  purgePublicSite();
+  purgePublicSite(def);
   revalidatePath(listPath(def));
   flash(listPath(def), "ok", "Order updated.");
 }

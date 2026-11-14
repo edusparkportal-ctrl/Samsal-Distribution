@@ -221,6 +221,18 @@ select tst.ok(exists(select 1 from public.audit_log where table_name='purchase_o
 select tst.fails($$update public.audit_log set action='delete'$$, 'audit log cannot be modified');
 select tst.fails($$delete from public.audit_log$$, 'audit log cannot be deleted');
 
+-- private document index (migration 0009)
+select tst.as_user('a0000000-0000-0000-0000-000000000004');
+select tst.works($$insert into public.media_assets(bucket,storage_path,file_name,folder,mime_type,size_bytes,uploaded_by) values ('private-docs','quotation/202611/x-q.pdf','q.pdf','quotation','application/pdf',1000,auth.uid())$$, 'sales can index a private quotation document');
+select tst.fails($$insert into public.media_assets(bucket,storage_path,file_name,folder,mime_type,size_bytes,uploaded_by) values ('public-media','general/202611/x-p.pdf','p.pdf','general','application/pdf',1000,auth.uid())$$, 'sales cannot add to the PUBLIC library');
+select tst.fails($$insert into public.media_assets(bucket,storage_path,file_name,folder,mime_type,size_bytes,uploaded_by) values ('private-docs','quotation/202611/y.pdf','y.pdf','quotation','application/pdf',1000,'a0000000-0000-0000-0000-000000000001')$$, 'cannot index a document as someone else');
+select tst.count_is($$select count(*) from public.media_assets where bucket='private-docs'$$, 1, 'sales reads the private index');
+select tst.as_user('a0000000-0000-0000-0000-000000000005');
+select tst.count_is($$select count(*) from public.media_assets where bucket='private-docs'$$, 1, 'read-only staff (orders/purchasing view) can read the private index');
+select tst.fails($$insert into public.media_assets(bucket,storage_path,file_name,folder,mime_type,size_bytes,uploaded_by) values ('private-docs','quotation/202611/z.pdf','z.pdf','quotation','application/pdf',1000,auth.uid())$$, 'read-only inventory manager cannot index private documents');
+select tst.anon();
+select tst.count_is($$select count(*) from public.media_assets where bucket='private-docs'$$, 0, 'anonymous visitors cannot see the private index');
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;
