@@ -13,7 +13,7 @@ export type ContentProduct = {
   specs: { label: string; value: string }[]; packaging: string | null; image?: { src: string; alt: string }; featured: boolean;
 };
 export type ContentService = { slug: string; title: string; icon: ServiceIcon; summary: string; detail: string; featured: boolean };
-export type ContentIndustry = { slug: string; name: string; summary: string; needs: string[]; categories: string[]; image: Img };
+export type ContentIndustry = { slug: string; name: string; summary: string; needs: string[]; categories: string[]; image: Img; featured: boolean };
 export type ContentStaff = {
   id: string; name: string; position: string; department: string | null; biography: string | null;
   photo: Img; email: string | null; linkedin: string | null;

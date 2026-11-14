@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { absoluteUrl, site } from "@/config/site";
+import { getSiteContent } from "@/lib/content/load";
 
 const routes = [
   { path: "/", priority: 1 },
@@ -15,12 +16,10 @@ if (site.legal.reviewed) {
   routes.push({ path: "/privacy", priority: 0.3 }, { path: "/terms", priority: 0.3 });
 }
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const { seo } = await getSiteContent();
   const lastModified = new Date();
-  return routes.map((r) => ({
-    url: absoluteUrl(r.path),
-    lastModified,
-    changeFrequency: "monthly",
-    priority: r.priority,
-  }));
+  return routes
+    .filter((r) => !seo[r.path]?.noindex) // pages an admin marked "do not list" stay out of the sitemap
+    .map((r) => ({ url: absoluteUrl(r.path), lastModified, changeFrequency: "monthly", priority: r.priority }));
 }

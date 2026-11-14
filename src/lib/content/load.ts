@@ -119,7 +119,7 @@ async function fromDatabase(): Promise<SiteContent> {
       slug: i.slug, name: i.title, summary: text(i.summary) ?? "",
       needs: ((i.needs ?? []) as Row[]).sort((a, b) => a.sort_order - b.sort_order).map((n) => n.text),
       categories: ((i.cats ?? []) as Row[]).sort((a, b) => a.sort_order - b.sort_order).map((x) => one(x.category)?.slug).filter(Boolean),
-      image: null,
+      image: null, featured: Boolean(i.is_featured),
     })),
     processSteps: steps.map((s) => ({ title: s.title, text: s.body })),
     documents: docs.map((d) => ({ title: d.title, description: text(d.description) ?? "", file: publicMediaUrl(one(d.file)) })),

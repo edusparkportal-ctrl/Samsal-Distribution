@@ -16,6 +16,7 @@ import { industries } from "../src/config/industries";
 import { documents } from "../src/config/documents";
 import { photos, productPhotos } from "../src/config/images";
 import { site } from "../src/config/site";
+import { ABOUT_MISSION, ABOUT_VALUES, ABOUT_VISION } from "../src/lib/content/static";
 
 const q = (v: string | null | undefined): string => (v == null ? "null" : `'${String(v).replace(/'/g, "''")}'`);
 const b = (v: boolean) => (v ? "true" : "false");
@@ -29,13 +30,20 @@ push("begin;");
 push();
 
 // Company + homepage singletons
-push("insert into public.company_settings (id, registered_name, brand_name, tagline, promise, description, city, country, service_coverage, footer_text)");
-push(`values (1, ${q(site.legalName)}, ${q(site.name)}, ${q(site.tagline)}, ${q(site.promise)}, ${q(site.description)}, 'Nairobi', 'Kenya', ${q(site.serviceLocation)}, null)`);
+push("insert into public.company_settings (id, registered_name, brand_name, tagline, promise, description, mission, vision, city, country, service_coverage, footer_text)");
+push(`values (1, ${q(site.legalName)}, ${q(site.name)}, ${q(site.tagline)}, ${q(site.promise)}, ${q(site.description)}, ${q(ABOUT_MISSION)}, ${q(ABOUT_VISION)}, 'Nairobi', 'Kenya', ${q(site.serviceLocation)}, null)`);
 push("on conflict (id) do nothing;");
 push();
 push("insert into public.homepage_settings (id, headline, subheadline, primary_cta_label, primary_cta_href, secondary_cta_label, secondary_cta_href, services_heading, industries_heading, products_heading)");
 push(`values (1, ${q(site.headline)}, ${q(site.heroText)}, 'Request a Quote', '/quote', 'Explore Our Products', '/products', 'From requirement to receiving bay', 'Industries we serve', 'What we supply')`);
 push("on conflict (id) do nothing;");
+push();
+
+// Core values (existing About-page copy; only seeded when the table is empty)
+push("insert into public.company_values (title, description, sort_order)");
+push("select * from (values");
+push(ABOUT_VALUES.map((v, i) => `  (${q(v.title)}, ${q(v.description)}, ${(i + 1) * 10})`).join(",\n"));
+push(") as v(title, description, sort_order) where not exists (select 1 from public.company_values);");
 push();
 
 // Categories

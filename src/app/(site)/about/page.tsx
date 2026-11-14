@@ -1,24 +1,26 @@
-import { Eye, HandCoins, Handshake, Repeat2, ShieldCheck, Target, Zap } from "lucide-react";
+import Image from "next/image";
+import { Eye, HandCoins, Handshake, Linkedin, Mail, Repeat2, ShieldCheck, Target, Zap, type LucideIcon } from "lucide-react";
 import { DocumentsList } from "@/components/DocumentsList";
 import { CtaBanner, PageHero, SectionHeading } from "@/components/ui";
-import { site } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { getSiteContent } from "@/lib/content/load";
+import { pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "About Us",
-  description:
-    "Learn about SAMSAL Supply & Distribution Limited, our mission, vision, values and our approach to procurement and distribution in Kenya.",
-  path: "/about",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "About Us",
+      description:
+        "Learn about SAMSAL Supply & Distribution Limited, our mission, vision, values and our approach to procurement and distribution in Kenya.",
+      path: "/about",
+    }),
+    "/about",
+  );
+}
 
-const values = [
-  { icon: ShieldCheck, title: "Integrity", text: "Honest dealing in every quotation, order and conversation." },
-  { icon: Repeat2, title: "Reliability", text: "Doing what we say we will do, when we say we will do it." },
-  { icon: HandCoins, title: "Accountability", text: "Owning outcomes and putting things right when they go wrong." },
-  { icon: Zap, title: "Efficiency", text: "Removing delay and effort from procurement for our customers." },
-  { icon: Handshake, title: "Customer commitment", text: "Treating each customer's requirement as our own." },
-  { icon: Target, title: "Continuous improvement", text: "Learning from every order to serve better the next time." },
-];
+// Icons for the well-known values; any value an admin adds later gets the default icon.
+const VALUE_ICONS: Record<string, LucideIcon> = {
+  integrity: ShieldCheck, reliability: Repeat2, accountability: HandCoins, efficiency: Zap, "customer commitment": Handshake, "continuous improvement": Target,
+};
 
 const approach = [
   { title: "Understand the requirement", text: "We start with what you need, in what quantity, to what specification and by when." },
@@ -27,14 +29,20 @@ const approach = [
   { title: "Supply and deliver", text: "We coordinate supply and delivery to your location and keep you informed." },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const { company, staff, documents } = await getSiteContent();
+  const values = company.values;
+  const mvCards = [
+    company.mission && { Icon: Target, title: "Our mission", text: company.mission },
+    company.vision && { Icon: Eye, title: "Our vision", text: company.vision },
+  ].filter(Boolean) as { Icon: LucideIcon; title: string; text: string }[];
   return (
     <>
       <PageHero
         eyebrow="About us"
         crumb="About Us"
         title="Simplifying procurement for businesses and institutions"
-        intro={site.promise}
+        intro={company.promise}
       />
 
       <section className="section">
@@ -43,7 +51,7 @@ export default function AboutPage() {
             <SectionHeading eyebrow="Company overview" title="Who we are" />
             <div className="mt-5 space-y-4 text-lg leading-relaxed">
               <p>
-                {site.legalName} is a Kenya-based procurement, wholesale supply and distribution company. We are
+                {company.legalName} is a Kenya-based procurement, wholesale supply and distribution company. We are
                 starting in Nairobi and surrounding areas, with the ambition to grow nationally and, in time,
                 across East Africa.
               </p>
@@ -57,52 +65,80 @@ export default function AboutPage() {
             <p className="eyebrow">At a glance</p>
             <dl className="space-y-4 text-sm">
               <div><dt className="font-semibold text-navy">Industry</dt><dd>Procurement, wholesale supply and distribution</dd></div>
-              <div><dt className="font-semibold text-navy">Initial market</dt><dd>{site.serviceLocation} and surrounding areas</dd></div>
-              <div><dt className="font-semibold text-navy">Tagline</dt><dd>{site.tagline}</dd></div>
+              <div><dt className="font-semibold text-navy">Initial market</dt><dd>{company.coverage} and surrounding areas</dd></div>
+              <div><dt className="font-semibold text-navy">Tagline</dt><dd>{company.tagline}</dd></div>
             </dl>
           </aside>
         </div>
       </section>
 
-      <section className="section bg-grey">
-        <div className="container-x grid gap-6 md:grid-cols-2">
-          <div className="card p-8">
-            <Target aria-hidden="true" className="mb-4 text-teal" size={32} strokeWidth={1.5} />
-            <h2 className="text-2xl">Our mission</h2>
-            <p className="mt-3 text-lg leading-relaxed">
-              To simplify procurement and improve access to dependable products through efficient sourcing,
-              competitive supply solutions and reliable distribution.
-            </p>
-          </div>
-          <div className="card p-8">
-            <Eye aria-hidden="true" className="mb-4 text-teal" size={32} strokeWidth={1.5} />
-            <h2 className="text-2xl">Our vision</h2>
-            <p className="mt-3 text-lg leading-relaxed">
-              To become a trusted and recognised procurement and distribution partner for businesses and
-              institutions across Africa.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="container-x">
-          <SectionHeading eyebrow="Core values" title="What we stand for" />
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {values.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="flex gap-4 border-t-2 border-navy pt-5">
-                <Icon aria-hidden="true" className="mt-0.5 shrink-0 text-teal" size={26} strokeWidth={1.75} />
-                <div>
-                  <h3 className="text-lg">{title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed">{text}</p>
-                </div>
+      {mvCards.length > 0 && (
+        <section className="section bg-grey">
+          <div className={`container-x grid gap-6 ${mvCards.length > 1 ? "md:grid-cols-2" : ""}`}>
+            {mvCards.map(({ Icon, title, text }) => (
+              <div key={title} className="card p-8">
+                <Icon aria-hidden="true" className="mb-4 text-teal" size={32} strokeWidth={1.5} />
+                <h2 className="text-2xl">{title}</h2>
+                <p className="mt-3 text-lg leading-relaxed">{text}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section className="section bg-grey">
+      {values.length > 0 && (
+        <section className="section">
+          <div className="container-x">
+            <SectionHeading eyebrow="Core values" title="What we stand for" />
+            <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {values.map((v) => {
+                const Icon = VALUE_ICONS[v.title.trim().toLowerCase()] ?? ShieldCheck;
+                return (
+                  <div key={v.title} className="flex gap-4 border-t-2 border-navy pt-5">
+                    <Icon aria-hidden="true" className="mt-0.5 shrink-0 text-teal" size={26} strokeWidth={1.75} />
+                    <div>
+                      <h3 className="text-lg">{v.title}</h3>
+                      {v.description && <p className="mt-1.5 text-sm leading-relaxed">{v.description}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {staff.length > 0 && (
+        <section className="section bg-grey" id="management">
+          <div className="container-x">
+            <SectionHeading eyebrow="Management" title="The people behind SAMSAL" />
+            <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {staff.map((p) => (
+                <li key={p.id} className="card flex flex-col overflow-hidden">
+                  {p.photo && (
+                    <div className="relative aspect-[4/3] bg-grey">
+                      <Image src={p.photo.src} alt={p.photo.alt || p.name} fill sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, 100vw" className="object-cover" />
+                    </div>
+                  )}
+                  <div className="flex flex-1 flex-col p-5">
+                    <h3 className="text-lg">{p.name}</h3>
+                    <p className="text-sm font-semibold text-teal-dark">{p.position}{p.department ? ` · ${p.department}` : ""}</p>
+                    {p.biography && <p className="mt-3 text-sm leading-relaxed">{p.biography}</p>}
+                    {(p.linkedin || p.email) && (
+                      <div className="mt-auto flex gap-3 pt-4">
+                        {p.linkedin && <a href={p.linkedin} target="_blank" rel="noopener noreferrer" aria-label={`${p.name} on LinkedIn`} className="text-navy hover:text-teal-dark"><Linkedin aria-hidden="true" size={20} /></a>}
+                        {p.email && <a href={`mailto:${p.email}`} aria-label={`Email ${p.name}`} className="text-navy hover:text-teal-dark"><Mail aria-hidden="true" size={20} /></a>}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
+      <section className={`section ${staff.length > 0 ? "" : "bg-grey"}`}>
         <div className="container-x">
           <SectionHeading
             eyebrow="Our approach"
@@ -147,7 +183,7 @@ export default function AboutPage() {
             intro="Our company profile, product catalogue and supplier documentation are shared with customers on request."
           />
           <div className="mt-10">
-            <DocumentsList />
+            <DocumentsList documents={documents} />
           </div>
         </div>
       </section>

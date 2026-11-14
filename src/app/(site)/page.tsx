@@ -11,19 +11,22 @@ import {
 import { CategoryIcon, ServiceIconView } from "@/components/Icons";
 import { CtaBanner, Photo, SectionHeading } from "@/components/ui";
 import { photos } from "@/config/images";
-import { industries } from "@/config/industries";
 import { quoteHref } from "@/config/navigation";
-import { categories, productsByCategory } from "@/config/products";
-import { processSteps, services } from "@/config/services";
-import { site } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { splitHeadline } from "@/lib/content/helpers";
+import { getSiteContent } from "@/lib/content/load";
+import { pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "Procurement and Wholesale Supply in Nairobi, Kenya",
-  description:
-    "Nairobi-based procurement and wholesale supply for Kenyan businesses and institutions: cleaning, hygiene and stationery supplies, sourcing and delivery.",
-  path: "/",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "Procurement and Wholesale Supply in Nairobi, Kenya",
+      description:
+        "Nairobi-based procurement and wholesale supply for Kenyan businesses and institutions: cleaning, hygiene and stationery supplies, sourcing and delivery.",
+      path: "/",
+    }),
+    "/",
+  );
+}
 
 const principles = [
   { icon: Search, title: "Dependable product sourcing", text: "We source against your requirement, not just what is easiest to supply." },
@@ -36,7 +39,9 @@ const principles = [
 
 const heroPoints = ["Itemised quotations", "Specification checks", "Delivery coordination"];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { company, homepage, categories, products, services, industries, processSteps } = await getSiteContent();
+  const [headA, headB] = splitHeadline(homepage.headline);
   return (
     <>
       {/* HERO */}
@@ -45,20 +50,24 @@ export default function HomePage() {
           <div className="animate-fade-up">
             <p className="mb-5 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-teal-light">
               <span aria-hidden="true" className="h-0.5 w-8 bg-amber" />
-              {site.tagline}
+              {company.tagline}
             </p>
             <h1 className="text-[2.5rem] font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-[4rem]">
-              Reliable Supply.
-              <br />
-              <span className="text-amber">Smarter Procurement.</span>
+              {headA}
+              {headB && (
+                <>
+                  <br />
+                  <span className="text-amber">{headB}</span>
+                </>
+              )}
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-white/90 sm:text-lg">{site.heroText}</p>
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-white/90 sm:text-lg">{homepage.subheadline}</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href={quoteHref} className="btn-accent px-7 py-3.5 text-base">
-                Request a Quote <ArrowRight aria-hidden="true" size={18} />
+              <Link href={homepage.primaryCta?.href ?? quoteHref} className="btn-accent px-7 py-3.5 text-base">
+                {homepage.primaryCta?.label ?? "Request a Quote"} <ArrowRight aria-hidden="true" size={18} />
               </Link>
-              <Link href="/products" className="btn-outline-light px-7 py-3.5 text-base">
-                Explore Our Products
+              <Link href={homepage.secondaryCta?.href ?? "/products"} className="btn-outline-light px-7 py-3.5 text-base">
+                {homepage.secondaryCta?.label ?? "Explore Our Products"}
               </Link>
             </div>
             <ul className="mt-9 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
@@ -74,7 +83,7 @@ export default function HomePage() {
           <div className="relative animate-fade-up [animation-delay:150ms]">
             <div aria-hidden="true" className="absolute -bottom-3 -right-3 hidden h-full w-full border-2 border-amber/70 sm:block" />
             <Photo
-              slot={photos.hero}
+              slot={homepage.heroImage}
               priority
               sizes="(min-width: 1024px) 46vw, 100vw"
               tone="dark"
@@ -92,10 +101,10 @@ export default function HomePage() {
             <SectionHeading eyebrow="Who we are" title="A procurement partner for businesses and institutions" />
             <div className="mt-6 space-y-4 text-base leading-relaxed sm:text-lg">
               <p>
-                {site.legalName} is a Kenya-based procurement, wholesale supply and distribution company, starting in
+                {company.legalName} is a Kenya-based procurement, wholesale supply and distribution company, starting in
                 Nairobi and surrounding areas.
               </p>
-              <p>{site.promise}</p>
+              <p>{company.promise}</p>
             </div>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/about" className="btn-primary">
@@ -119,7 +128,7 @@ export default function HomePage() {
           <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
             <SectionHeading
               eyebrow="Products"
-              title="What we supply"
+              title={homepage.productsHeading}
               intro="Core categories for offices, schools, hospitality and facilities, with more being added."
             />
             <Link href="/products" className="btn-outline self-start sm:self-auto">
@@ -128,7 +137,7 @@ export default function HomePage() {
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {categories.map((c) => {
-              const names = productsByCategory(c.slug).map((p) => p.name);
+              const names = products.filter((p) => p.category === c.slug).map((p) => p.name);
               return (
                 <Link
                   key={c.slug}
@@ -136,7 +145,7 @@ export default function HomePage() {
                   className="card group flex flex-col overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <Photo
-                    slot={photos[c.slug]}
+                    slot={c.image}
                     sizes="(min-width: 1024px) 24vw, (min-width: 640px) 45vw, 100vw"
                     className="aspect-[4/3] border-b border-grey-200"
                     fallback={<CategoryIcon name={c.icon} size={40} strokeWidth={1.5} />}
@@ -165,7 +174,7 @@ export default function HomePage() {
           <div className="lg:sticky lg:top-28 lg:self-start">
             <SectionHeading
               eyebrow="Services"
-              title="From requirement to receiving bay"
+              title={homepage.servicesHeading}
               intro="Six services that cover the steps between knowing what you need and having it delivered."
             />
             <Link href="/services" className="btn-primary mt-8">
@@ -224,7 +233,7 @@ export default function HomePage() {
       {/* INDUSTRIES */}
       <section className="section bg-grey">
         <div className="container-x">
-          <SectionHeading eyebrow="Industries" title="Industries we serve" intro="Different sectors buy differently. We tailor quotations and supply to how you operate." />
+          <SectionHeading eyebrow="Industries" title={homepage.industriesHeading} intro="Different sectors buy differently. We tailor quotations and supply to how you operate." />
           <ul className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {industries.map((i) => (
               <li key={i.slug}>

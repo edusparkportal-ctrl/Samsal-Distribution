@@ -1,18 +1,25 @@
 import Link from "next/link";
 import { ProductCatalogue } from "@/components/ProductCatalogue";
 import { CtaBanner, JsonLd, PageHero } from "@/components/ui";
-import { categories, plannedCategories, products } from "@/config/products";
+import { plannedCategories } from "@/config/products";
+import { getSiteContent } from "@/lib/content/load";
 import { absoluteUrl } from "@/config/site";
-import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { breadcrumbJsonLd, pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "Products: Cleaning, Hygiene and Stationery Supplies",
-  description:
-    "Wholesale cleaning, hygiene, stationery and institutional supplies for businesses in Nairobi and across Kenya. Search the catalogue and request a quote.",
-  path: "/products",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "Products: Cleaning, Hygiene and Stationery Supplies",
+      description:
+        "Wholesale cleaning, hygiene, stationery and institutional supplies for businesses in Nairobi and across Kenya. Search the catalogue and request a quote.",
+      path: "/products",
+    }),
+    "/products",
+  );
+}
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  const { categories, products } = await getSiteContent();
   // Catalogue list as structured data. Deliberately no prices, brands or availability (none are published).
   const itemList = {
     "@context": "https://schema.org",
@@ -37,7 +44,7 @@ export default function ProductsPage() {
         intro={`Browse ${categories.length} product categories. We do not publish fixed prices, because wholesale pricing and availability change. Request a quote for current pricing against your exact requirement.`}
       />
 
-      <ProductCatalogue />
+      <ProductCatalogue categories={categories} products={products} />
 
       <section className="border-t border-grey-200 bg-grey py-12 sm:py-14">
         <div className="container-x grid gap-6 md:grid-cols-[1fr_auto] md:items-center">

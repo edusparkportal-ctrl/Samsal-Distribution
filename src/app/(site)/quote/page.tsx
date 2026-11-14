@@ -2,16 +2,21 @@ import { CheckCircle2 } from "lucide-react";
 import { QuoteForm } from "@/components/QuoteForm";
 import { PageHero } from "@/components/ui";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
-import { getCategory } from "@/config/products";
 import { site } from "@/config/site";
-import { pageMetadata } from "@/lib/seo";
+import { getSiteContent } from "@/lib/content/load";
+import { pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "Request a Quote",
-  description:
-    "Request a quotation from SAMSAL Supply & Distribution. Tell us the products, quantities and delivery details you need in Nairobi or across Kenya.",
-  path: "/quote",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "Request a Quote",
+      description:
+        "Request a quotation from SAMSAL Supply & Distribution. Tell us the products, quantities and delivery details you need in Nairobi or across Kenya.",
+      path: "/quote",
+    }),
+    "/quote",
+  );
+}
 
 export default async function QuotePage({
   searchParams,
@@ -19,12 +24,13 @@ export default async function QuotePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
+  const { categories } = await getSiteContent();
   const raw = sp.product;
   const initialProduct = (Array.isArray(raw) ? raw[0] : raw)?.slice(0, 150) ?? "";
   const rawCat = sp.category;
   const catSlug = Array.isArray(rawCat) ? rawCat[0] : rawCat;
   // Only known category slugs are accepted; anything else is ignored.
-  const initialCategory = (catSlug && getCategory(catSlug)?.name) || "";
+  const initialCategory = (catSlug && categories.find((c) => c.slug === catSlug)?.name) || "";
 
   return (
     <>
@@ -37,7 +43,7 @@ export default async function QuotePage({
       <section className="section">
         <div className="container-x grid gap-10 lg:grid-cols-[1fr_340px] lg:gap-14">
           <div className="card p-5 sm:p-8">
-            <QuoteForm kind="quote" initialProduct={initialProduct} initialCategory={initialCategory} turnstileSiteKey={site.turnstileSiteKey} />
+            <QuoteForm kind="quote" initialProduct={initialProduct} initialCategory={initialCategory} turnstileSiteKey={site.turnstileSiteKey} categories={categories.map((c) => ({ slug: c.slug, name: c.name }))} />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-28 lg:self-start">

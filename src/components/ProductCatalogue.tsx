@@ -5,12 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { PackageSearch, Search, X } from "lucide-react";
 import { CategoryIcon } from "@/components/Icons";
 import { ProductCard } from "@/components/ProductCard";
-import { categories, getCategory, products } from "@/config/products";
+import type { ContentCategory, ContentProduct } from "@/lib/content/types";
 
 const ALL = "all";
 
-function matches(q: string, p: (typeof products)[number]) {
-  const cat = getCategory(p.category)?.name ?? "";
+function matches(q: string, p: ContentProduct, cat: string) {
   const haystack = [p.name, p.description, cat, ...p.specs.map((s) => s.label)].join(" ").toLowerCase();
   // every word typed must appear somewhere (so "floor cleaner" and "cleaner floor" both work)
   return q
@@ -20,7 +19,8 @@ function matches(q: string, p: (typeof products)[number]) {
     .every((w) => haystack.includes(w));
 }
 
-export function ProductCatalogue() {
+export function ProductCatalogue({ categories, products }: { categories: ContentCategory[]; products: ContentProduct[] }) {
+  const getCategory = (slug: string) => categories.find((c) => c.slug === slug);
   const [category, setCategory] = useState<string>(ALL);
   const [query, setQuery] = useState("");
 
@@ -46,16 +46,18 @@ export function ProductCatalogue() {
   const counts = useMemo(() => {
     const m: Record<string, number> = { [ALL]: 0 };
     for (const p of products) {
-      if (query.trim() && !matches(query, p)) continue;
+      if (query.trim() && !matches(query, p, getCategory(p.category)?.name ?? "")) continue;
       m[ALL] += 1;
       m[p.category] = (m[p.category] ?? 0) + 1;
     }
     return m;
-  }, [query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, products, categories]);
 
   const visible = useMemo(
-    () => products.filter((p) => (category === ALL || p.category === category) && (!query.trim() || matches(query, p))),
-    [category, query],
+    () => products.filter((p) => (category === ALL || p.category === category) && (!query.trim() || matches(query, p, getCategory(p.category)?.name ?? ""))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [category, query, products, categories],
   );
 
   const grouped = category === ALL && !query.trim();
@@ -181,7 +183,7 @@ export function ProductCatalogue() {
                     </div>
                     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                       {items.map((p) => (
-                        <ProductCard key={p.slug} product={p} />
+                        <ProductCard key={p.slug} product={p} category={getCategory(p.category)} />
                       ))}
                     </div>
                   </div>
@@ -191,7 +193,7 @@ export function ProductCatalogue() {
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((p) => (
-                <ProductCard key={p.slug} product={p} />
+                <ProductCard key={p.slug} product={p} category={getCategory(p.category)} />
               ))}
             </div>
           )}

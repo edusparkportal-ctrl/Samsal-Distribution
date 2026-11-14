@@ -3,13 +3,23 @@
 -- for singleton rows (company_settings, homepage_settings use ON CONFLICT DO NOTHING).
 begin;
 
-insert into public.company_settings (id, registered_name, brand_name, tagline, promise, description, city, country, service_coverage, footer_text)
-values (1, 'SAMSAL Supply & Distribution Limited', 'SAMSAL', 'Procurement. Supply. Delivery.', 'SAMSAL connects businesses and institutions with dependable product sourcing, competitive quotations and reliable supply and delivery solutions.', 'SAMSAL Supply & Distribution Limited is a Nairobi-based procurement, wholesale supply and distribution company serving businesses and institutions in Kenya.', 'Nairobi', 'Kenya', 'Nairobi, Kenya', null)
+insert into public.company_settings (id, registered_name, brand_name, tagline, promise, description, mission, vision, city, country, service_coverage, footer_text)
+values (1, 'SAMSAL Supply & Distribution Limited', 'SAMSAL', 'Procurement. Supply. Delivery.', 'SAMSAL connects businesses and institutions with dependable product sourcing, competitive quotations and reliable supply and delivery solutions.', 'SAMSAL Supply & Distribution Limited is a Nairobi-based procurement, wholesale supply and distribution company serving businesses and institutions in Kenya.', 'To simplify procurement and improve access to dependable products through efficient sourcing, competitive supply solutions and reliable distribution.', 'To become a trusted and recognised procurement and distribution partner for businesses and institutions across Africa.', 'Nairobi', 'Kenya', 'Nairobi, Kenya', null)
 on conflict (id) do nothing;
 
 insert into public.homepage_settings (id, headline, subheadline, primary_cta_label, primary_cta_href, secondary_cta_label, secondary_cta_href, services_heading, industries_heading, products_heading)
 values (1, 'Reliable Supply. Smarter Procurement.', 'SAMSAL Supply & Distribution connects businesses and institutions with dependable sourcing, quality products and efficient delivery solutions.', 'Request a Quote', '/quote', 'Explore Our Products', '/products', 'From requirement to receiving bay', 'Industries we serve', 'What we supply')
 on conflict (id) do nothing;
+
+insert into public.company_values (title, description, sort_order)
+select * from (values
+  ('Integrity', 'Honest dealing in every quotation, order and conversation.', 10),
+  ('Reliability', 'Doing what we say we will do, when we say we will do it.', 20),
+  ('Accountability', 'Owning outcomes and putting things right when they go wrong.', 30),
+  ('Efficiency', 'Removing delay and effort from procurement for our customers.', 40),
+  ('Customer commitment', 'Treating each customer''s requirement as our own.', 50),
+  ('Continuous improvement', 'Learning from every order to serve better the next time.', 60)
+) as v(title, description, sort_order) where not exists (select 1 from public.company_values);
 
 insert into public.product_categories (slug, name, summary, icon, seo_description, fallback_image, image_alt, sort_order, is_active) values ('cleaning-supplies', 'Cleaning Supplies', 'Detergents, disinfectants and floor and surface care for facilities of every size.', 'spray', 'Cleaning supplies for businesses and institutions in Kenya: detergents, disinfectants, bleach, dishwashing liquids, floor cleaners and industrial cleaning products.', '/images/illustrations/cleaning-supplies.svg', 'Illustration of cleaning supplies: detergent bottle, spray bottle and bucket', 10, true) on conflict (slug) do nothing;
 insert into public.product_categories (slug, name, summary, icon, seo_description, fallback_image, image_alt, sort_order, is_active) values ('hygiene-supplies', 'Hygiene Supplies', 'Washroom and personal hygiene consumables, dispensers and protective items.', 'hand', 'Hygiene supplies for offices, schools and hospitality in Nairobi: handwash, sanitiser, tissue products, bin liners, gloves and dispensers.', '/images/illustrations/hygiene-supplies.svg', 'Illustration of hygiene supplies: pump soap bottle, tissue rolls and a wall dispenser', 20, true) on conflict (slug) do nothing;

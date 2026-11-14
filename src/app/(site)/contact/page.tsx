@@ -4,14 +4,21 @@ import { QuoteForm } from "@/components/QuoteForm";
 import { JsonLd, PageHero } from "@/components/ui";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { placeholders, site } from "@/config/site";
-import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { SocialIcon } from "@/components/SocialIcon";
+import { getSiteContent } from "@/lib/content/load";
+import { breadcrumbJsonLd, pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "Contact Us",
-  description:
-    "Contact SAMSAL Supply & Distribution in Nairobi, Kenya for business enquiries, procurement support and product information.",
-  path: "/contact",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "Contact Us",
+      description:
+        "Contact SAMSAL Supply & Distribution in Nairobi, Kenya for business enquiries, procurement support and product information.",
+      path: "/contact",
+    }),
+    "/contact",
+  );
+}
 
 export default async function ContactPage({
   searchParams,
@@ -21,13 +28,15 @@ export default async function ContactPage({
   const sp = await searchParams;
   const raw = sp.topic;
   const topic = (Array.isArray(raw) ? raw[0] : raw)?.slice(0, 100) ?? "";
-  const { contact } = site;
+  const content = await getSiteContent();
+  const { contact, company } = content;
+  const social = content.social.filter((s) => s.contact);
 
   const items = [
     {
       icon: MapPin,
       label: "Service location",
-      value: <>{site.serviceLocation}</>,
+      value: <>{contact.address ?? company.coverage}</>,
     },
     {
       icon: Phone,
@@ -95,6 +104,17 @@ export default async function ContactPage({
                   </li>
                 ))}
               </ul>
+              {social.length > 0 && (
+                <ul aria-label="Social media" className="mt-6 flex gap-2 border-t border-grey-200 pt-5">
+                  {social.map((s) => (
+                    <li key={s.id}>
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" aria-label={s.platform} className="flex h-10 w-10 items-center justify-center rounded border border-grey-300 text-navy hover:border-teal hover:text-teal-dark">
+                        <SocialIcon platform={s.platform} size={20} />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="card p-6">

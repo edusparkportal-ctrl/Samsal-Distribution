@@ -6,13 +6,27 @@ import { photos, productPhotos } from "@/config/images";
 import { site } from "@/config/site";
 import type { SiteContent } from "./types";
 
+/** Existing About-page copy (moved here from the page so the database seed and the fallback share one source). */
+export const ABOUT_MISSION =
+  "To simplify procurement and improve access to dependable products through efficient sourcing, competitive supply solutions and reliable distribution.";
+export const ABOUT_VISION =
+  "To become a trusted and recognised procurement and distribution partner for businesses and institutions across Africa.";
+export const ABOUT_VALUES = [
+  { title: "Integrity", description: "Honest dealing in every quotation, order and conversation." },
+  { title: "Reliability", description: "Doing what we say we will do, when we say we will do it." },
+  { title: "Accountability", description: "Owning outcomes and putting things right when they go wrong." },
+  { title: "Efficiency", description: "Removing delay and effort from procurement for our customers." },
+  { title: "Customer commitment", description: "Treating each customer's requirement as our own." },
+  { title: "Continuous improvement", description: "Learning from every order to serve better the next time." },
+];
+
 /** The original hard-coded content, used when Supabase is not configured or temporarily unreachable. */
 export function staticContent(): SiteContent {
   return {
     source: "static",
     company: {
       legalName: site.legalName, name: site.name, tagline: site.tagline, promise: site.promise, description: site.description,
-      mission: null, vision: null, values: [], address: site.contact.address, city: "Nairobi", country: "Kenya",
+      mission: ABOUT_MISSION, vision: ABOUT_VISION, values: ABOUT_VALUES, address: site.contact.address, city: "Nairobi", country: "Kenya",
       hours: site.contact.hours, coverage: site.serviceLocation, footerText: null, logo: null,
       registrationDetails: site.legal.registeredNumber, taxPin: null,
     },
@@ -30,7 +44,7 @@ export function staticContent(): SiteContent {
     categories: categories.map((c) => ({ ...c, image: photos[c.slug] ?? null })),
     products: products.map((p) => ({ ...p, image: p.image ?? productPhotos[p.slug] ?? undefined, featured: false })),
     services: services.map((s) => ({ slug: s.slug, title: s.title, icon: s.icon, summary: s.summary, detail: s.detail, featured: true })),
-    industries: industries.map((i) => ({ slug: i.slug, name: i.name, summary: i.summary, needs: i.needs, categories: i.categories, image: photos[i.slug] ?? null })),
+    industries: industries.map((i) => ({ slug: i.slug, name: i.name, summary: i.summary, needs: i.needs, categories: i.categories, image: photos[i.slug] ?? null, featured: true })),
     processSteps,
     documents,
     announcements: [],

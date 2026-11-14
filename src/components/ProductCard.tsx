@@ -1,12 +1,10 @@
 import { CategoryIcon } from "@/components/Icons";
 import { Photo, QuoteLink } from "@/components/ui";
-import { photos, productPhotos } from "@/config/images";
-import { getCategory, type Product } from "@/config/products";
+import type { ContentCategory, ContentProduct } from "@/lib/content/types";
 
-export function ProductCard({ product }: { product: Product }) {
-  const category = getCategory(product.category);
-  // Priority: product's own image (products.ts) > per-product photo (images.ts) > category image
-  const slot = product.image ?? productPhotos[product.slug] ?? photos[product.category] ?? null;
+export function ProductCard({ product, category }: { product: ContentProduct; category?: ContentCategory }) {
+  // Product photo (uploaded in the Media library) > category image
+  const slot = product.image ?? category?.image ?? null;
 
   return (
     <article className="card group flex h-full flex-col overflow-hidden transition-shadow duration-200 hover:shadow-md">

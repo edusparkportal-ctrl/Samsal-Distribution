@@ -1,6 +1,7 @@
 -- =====================================================================
 -- 0006 STORAGE: two buckets.
---   public-media : website images (publicly readable by URL, only staff can write)
+--   public-media : website images and approved public downloads (publicly readable by URL, only staff can write).
+--                  SVG is deliberately NOT allowed (it can carry scripts).
 --   private-docs : supplier/tender/PO documents (never public; accessed through
 --                  short-lived signed URLs created server-side after a permission check)
 -- Size/type limits here mirror the checks in the application.
@@ -9,7 +10,7 @@
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
   ('public-media', 'public-media', true, 5242880,
-     array['image/jpeg','image/png','image/webp','image/svg+xml']),
+     array['image/jpeg','image/png','image/webp','application/pdf']),
   ('private-docs', 'private-docs', false, 10485760,
      array['application/pdf','image/jpeg','image/png',
            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

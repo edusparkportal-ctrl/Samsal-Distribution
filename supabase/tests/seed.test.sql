@@ -14,10 +14,10 @@ begin
   select count(*) into n from public.contact_channels; assert n = 0, 'no contact details are seeded';
   select count(*) into n from public.social_links; assert n = 0, 'no social accounts are seeded';
   select count(*) into n from public.staff_members; assert n = 0, 'no staff are seeded';
-  select count(*) into n from public.company_values; assert n = 0, 'no values are seeded';
+  select count(*) into n from public.company_values; assert n = 6, 'the six existing About-page values are seeded: ' || n;
   select count(*) into n from public.company_settings
-    where mission is null and vision is null and address_line is null and registration_details is null and tax_pin is null and business_hours is null;
-  assert n = 1, 'mission/vision/address/registration/PIN/hours must be empty';
+    where mission is not null and vision is not null and address_line is null and registration_details is null and tax_pin is null and business_hours is null;
+  assert n = 1, 'mission/vision are the existing About copy; address/registration/PIN/hours must be empty';
   select count(*) into n from public.products where packaging is not null; assert n = 0, 'no pack sizes invented';
   select count(*) into n from public.product_specifications where value not in ('Specified per order','Supplied by you','Provided after sourcing'); assert n = 0, 'no specification values invented';
   -- modules ship with inventory/orders/tenders off

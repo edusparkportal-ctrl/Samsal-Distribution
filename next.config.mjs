@@ -1,3 +1,12 @@
+// Images uploaded through the admin media library are served from the project's public Storage bucket.
+const supabaseHost = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null;
+  } catch {
+    return null;
+  }
+})();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -5,6 +14,9 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   images: {
     formats: ["image/avif", "image/webp"],
+    remotePatterns: supabaseHost
+      ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/public-media/**" }]
+      : [],
   },
   async redirects() {
     // Legacy URL from an earlier draft; the Privacy Policy lives at /privacy.

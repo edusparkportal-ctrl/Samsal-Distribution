@@ -1,17 +1,23 @@
 import { ServiceIconView } from "@/components/Icons";
 import { CtaBanner, JsonLd, PageHero, SectionHeading } from "@/components/ui";
-import { processSteps, services } from "@/config/services";
+import { getSiteContent } from "@/lib/content/load";
 import { absoluteUrl, site } from "@/config/site";
-import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { breadcrumbJsonLd, pageMetadata, withSeo } from "@/lib/seo";
 
-export const metadata = pageMetadata({
-  title: "Procurement, Wholesale Supply and Distribution Services",
-  description:
-    "Procurement and sourcing, wholesale and institutional supply, commercial distribution, order fulfilment and delivery coordination for businesses in Nairobi, Kenya.",
-  path: "/services",
-});
+export async function generateMetadata() {
+  return withSeo(
+    pageMetadata({
+      title: "Procurement, Wholesale Supply and Distribution Services",
+      description:
+        "Procurement and sourcing, wholesale and institutional supply, commercial distribution, order fulfilment and delivery coordination for businesses in Nairobi, Kenya.",
+      path: "/services",
+    }),
+    "/services",
+  );
+}
 
-export default function ServicesPage() {
+export default async function ServicesPage() {
+  const { services, processSteps } = await getSiteContent();
   // Services only, with no claims about licences, fleet, coverage beyond Nairobi, prices or ratings.
   const serviceList = {
     "@context": "https://schema.org",

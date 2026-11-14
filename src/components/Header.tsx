@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { SocialIcon } from "@/components/SocialIcon";
 import { mainNav, quoteHref } from "@/config/navigation";
 
-export function Header() {
+export function Header({ social = [] }: { social?: { id: string; platform: string; url: string }[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -55,6 +56,17 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {social.length > 0 && (
+            <ul aria-label="Social media" className="mr-1 hidden items-center gap-1 xl:flex">
+              {social.map((s) => (
+                <li key={s.id}>
+                  <a href={s.url} target="_blank" rel="noopener noreferrer" aria-label={s.platform} className="flex h-9 w-9 items-center justify-center rounded text-navy hover:bg-grey">
+                    <SocialIcon platform={s.platform} />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           <Link href={quoteHref} className="btn-accent hidden px-4 sm:inline-flex">
             Request a Quote
           </Link>

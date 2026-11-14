@@ -3,7 +3,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Script from "next/script";
 import { AlertCircle, CheckCircle2, Loader2, Paperclip } from "lucide-react";
-import { categories } from "@/config/products";
 import {
   LIMITS,
   emptyValues,
@@ -68,12 +67,14 @@ export function QuoteForm({
   initialCategory = "",
   initialMessage = "",
   turnstileSiteKey = null,
+  categories = [],
 }: {
   kind?: FormKind;
   initialProduct?: string;
   initialCategory?: string;
   initialMessage?: string;
   turnstileSiteKey?: string | null;
+  categories?: { slug: string; name: string }[];
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const formToken = useRef<string>("");

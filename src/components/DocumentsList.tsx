@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Download, FileText } from "lucide-react";
-import { documents } from "@/config/documents";
+import type { ContentDocument } from "@/lib/content/types";
 
-export function DocumentsList() {
+export function DocumentsList({ documents }: { documents: ContentDocument[] }) {
   return (
     <ul className="grid gap-4 md:grid-cols-3">
       {documents.map((d) => (
@@ -11,7 +11,7 @@ export function DocumentsList() {
           <h3 className="text-base">{d.title}</h3>
           <p className="mt-1.5 flex-1 text-sm">{d.description}</p>
           {d.file ? (
-            <a href={d.file} download className="btn-outline mt-4 w-full">
+            <a href={d.file} target="_blank" rel="noopener" className="btn-outline mt-4 w-full">
               <Download aria-hidden="true" size={16} /> Download
             </a>
           ) : (
