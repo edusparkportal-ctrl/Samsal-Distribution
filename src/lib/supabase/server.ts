@@ -1,7 +1,9 @@
 import "server-only";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { requirePublicEnv } from "./env";
+
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 /**
  * Supabase client acting AS THE SIGNED-IN USER (anon key + the user's session cookie).
@@ -16,7 +18,7 @@ export async function createSupabaseServerClient() {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(list) {
+      setAll(list: CookieToSet[]) {
         try {
           list.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
         } catch {
