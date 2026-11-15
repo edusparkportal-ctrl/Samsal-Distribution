@@ -9,7 +9,8 @@ import {
   Truck,
 } from "lucide-react";
 import { CategoryIcon, ServiceIconView } from "@/components/Icons";
-import { CtaBanner, Photo, SectionHeading } from "@/components/ui";
+import { Photo, SectionHeading } from "@/components/ui";
+import { CtaBanner } from "@/components/CtaBanner";
 import { photos } from "@/config/images";
 import { quoteHref } from "@/config/navigation";
 import { splitHeadline } from "@/lib/content/helpers";

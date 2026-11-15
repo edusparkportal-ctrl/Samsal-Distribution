@@ -1,7 +1,8 @@
 import Image from "next/image";
 import { Eye, HandCoins, Handshake, Linkedin, Mail, Repeat2, ShieldCheck, Target, Zap, type LucideIcon } from "lucide-react";
 import { DocumentsList } from "@/components/DocumentsList";
-import { CtaBanner, PageHero, SectionHeading } from "@/components/ui";
+import { PageHero, SectionHeading } from "@/components/ui";
+import { CtaBanner } from "@/components/CtaBanner";
 import { getSiteContent } from "@/lib/content/load";
 import { pageMetadata, withSeo } from "@/lib/seo";
 

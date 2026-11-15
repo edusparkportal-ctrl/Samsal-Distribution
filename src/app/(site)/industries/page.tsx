@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, GraduationCap, Hotel, Landmark, Building, HeartHandshake } from "lucide-react";
-import { BulletList, CtaBanner, JsonLd, PageHero, Photo } from "@/components/ui";
+import { BulletList, JsonLd, PageHero, Photo } from "@/components/ui";
+import { CtaBanner } from "@/components/CtaBanner";
 import { photos } from "@/config/images";
 import { getSiteContent } from "@/lib/content/load";
 import { breadcrumbJsonLd, pageMetadata, withSeo } from "@/lib/seo";

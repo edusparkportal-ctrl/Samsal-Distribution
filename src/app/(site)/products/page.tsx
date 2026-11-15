@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProductCatalogue } from "@/components/ProductCatalogue";
-import { CtaBanner, JsonLd, PageHero } from "@/components/ui";
+import { JsonLd, PageHero } from "@/components/ui";
+import { CtaBanner } from "@/components/CtaBanner";
 import { plannedCategories } from "@/config/products";
 import { getSiteContent } from "@/lib/content/load";
 import { absoluteUrl } from "@/config/site";

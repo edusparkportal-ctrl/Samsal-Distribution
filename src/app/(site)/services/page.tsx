@@ -1,5 +1,6 @@
 import { ServiceIconView } from "@/components/Icons";
-import { CtaBanner, JsonLd, PageHero, SectionHeading } from "@/components/ui";
+import { JsonLd, PageHero, SectionHeading } from "@/components/ui";
+import { CtaBanner } from "@/components/CtaBanner";
 import { getSiteContent } from "@/lib/content/load";
 import { absoluteUrl, site } from "@/config/site";
 import { breadcrumbJsonLd, pageMetadata, withSeo } from "@/lib/seo";
