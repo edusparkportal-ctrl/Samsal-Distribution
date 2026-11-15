@@ -20,7 +20,14 @@ export async function SiteChrome({ children }: { children: React.ReactNode }) {
           {banner.href ? <Link href={banner.href} className="underline underline-offset-2 hover:no-underline">{banner.message}</Link> : banner.message}
         </div>
       )}
-      <Header social={content.social.filter((s) => s.header)} />
+      <Header
+        social={content.social.filter((s) => s.header)}
+        categories={content.categories.map((c) => ({ slug: c.slug, name: c.name, summary: c.summary }))}
+        tagline={content.company.tagline}
+        location={content.contact.address ?? content.company.coverage}
+        phone={content.contact.phone}
+        email={content.contact.email}
+      />
       <main id="main">{children}</main>
       <Footer content={content} />
       <MobileCtaBar whatsapp={whatsappHref(content.contact.whatsappNumber)} />
