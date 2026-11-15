@@ -150,6 +150,19 @@ Images are original vector illustrations (`public/images/illustrations`), config
 - Final logo artwork, if one exists.
 - Legal pages (Privacy Policy / Terms) : recommended before launch, particularly because the forms collect personal data (Kenya Data Protection Act). Have these reviewed by a qualified adviser.
 
+## 11b. Version 3: admin platform (Supabase)
+
+Version 3 adds `/admin`: content management, enquiries/CRM, quotations with PDF, suppliers, purchase orders, inventory,
+sales orders, deliveries, tenders, reports and an activity log, with role-based access. Start with:
+
+- `docs/SUPABASE_SETUP.md` - database, auth and environment setup
+- `docs/DEPLOYMENT.md` - Vercel deployment and first-build checklist
+- `docs/ADMIN_GUIDE.md` - how staff use it
+- `docs/MODULES.md` - how to add a module
+- `docs/OUTSTANDING_ISSUES.md` - what was and was not verified, and known gaps
+
+Without the Supabase variables the public site runs from its built-in content (Version 2 behaviour). Run the database tests locally with `npm run db:test` (needs PostgreSQL).
+
 ## 12. Structure
 
 ```
@@ -162,6 +175,5 @@ public/logo/      logo files
 scripts/          brand asset generator
 ```
 
-The folder layout leaves room for future modules (enquiry dashboard, supplier database, quotation and purchase-order
-management, inventory, customer accounts, tender tracking) without restructuring: add routes under `src/app/admin/*`
-and a database when genuinely needed.
+Version 3 additions: `src/app/admin/` (panel), `src/lib/admin/` (resource registry and engine), `src/lib/supabase/`, `src/lib/auth/`,
+`src/lib/content/` (database-first content with static fallback), `supabase/` (migrations, seed, tests). Add new modules as described in `docs/MODULES.md`.
