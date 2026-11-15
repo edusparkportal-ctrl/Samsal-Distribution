@@ -22,6 +22,7 @@ Run each file in `supabase/migrations/` in the SQL editor, or with the Supabase 
 | `..07_reference_data.sql` | roles, permissions, modules, units |
 | `..08_quotation_guards.sql` | issued quotations are frozen |
 | `..09_private_doc_index.sql` | private document index policies |
+| `..10_function_hardening.sql` | revokes API access to trigger functions; pins search_path |
 
 Never edit an applied migration; add a new numbered file instead.
 
