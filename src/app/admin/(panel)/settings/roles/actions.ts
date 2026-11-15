@@ -34,7 +34,7 @@ export async function saveRolePermissions(formData: FormData) {
   if (role!.is_super) flash(`${PATH}?role=${roleId}`, "error", "The Super Administrator role always has every permission.");
 
   const { data: current } = await sb.from("role_permissions").select("permission_key").eq("role_id", roleId);
-  const have = new Set((current ?? []).map((r: { permission_key: string }) => r.permission_key));
+  const have = new Set<string>((current ?? []).map((r: { permission_key: string }) => r.permission_key));
   const toAdd = [...wanted].filter((k) => !have.has(k));
   const wantedKeys: Set<string> = wanted;
   const toRemove = [...have].filter((k) => !wantedKeys.has(k));

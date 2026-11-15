@@ -93,7 +93,7 @@ export async function saveResource(formData: FormData) {
   for (const l of def.links ?? []) {
     const wanted = new Set(parseUuidList(formData, `link_${l.name}`));
     const { data: current } = await sb.from(l.table).select(l.other).eq(l.fk, rowId);
-    const have = new Set((current ?? []).map((r: Row) => r[l.other] as string));
+    const have = new Set<string>((current ?? []).map((r: Row) => r[l.other] as string));
     const add = [...wanted].filter((x) => !have.has(x));
     const remove = [...have].filter((x) => !wanted.has(x));
     if (add.length) {

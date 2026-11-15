@@ -22,7 +22,7 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   if (sp.folder) query = query.eq("folder", sp.folder);
   const { data } = await query;
   const { data: allFolders } = await sb.from("media_assets").select("folder").eq("bucket", "public-media").is("deleted_at", null);
-  const folders = [...new Set((allFolders ?? []).map((f: { folder: string }) => f.folder))].sort();
+  const folders: string[] = [...new Set<string>((allFolders ?? []).map((f: { folder: string }) => f.folder))].sort();
   const q = (sp.q ?? "").trim().toLowerCase();
   const assets = ((data ?? []) as Asset[]).filter((a) => !q || `${a.title ?? ""} ${a.file_name} ${a.alt_text ?? ""}`.toLowerCase().includes(q));
 
