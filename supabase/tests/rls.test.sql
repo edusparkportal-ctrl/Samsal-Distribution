@@ -285,6 +285,174 @@ select tst.as_user('a0000000-0000-0000-0000-000000000009');
 select tst.count_is($$select count(*) from public.hr_candidates$$, 0, 'switching the module off stops access immediately');
 select tst.admin();
 
+-- ---------------- Automation engine (migrations 0012-0014) ----------------
+select tst.admin();
+select tst.ok(exists(select 1 from public.modules where key='automation' and enabled), 'automation module exists and is on');
+select tst.count_is($$select count(*) from public.automation_rules$$, 17, 'all 17 automation rules exist');
+select tst.ok(not (select email_enabled from public.automation_settings), 'email automation ships OFF');
+select tst.count_is($$select count(*) from public.notification_outbox$$, 0, 'nothing queued for email while email is off');
+select tst.count_is($$select count(*) from public.automation_rules where kind='scheduled' and not exists (select 1 from pg_proc where proname = 'auto_' || key)$$, 0, 'every scheduled rule has an implementation');
+
+-- enquiry: assignment, staff alert, reference
+insert into public.enquiries(customer_id, product_text) values ((select id from public.customers limit 1), '50 boxes of pens');
+select tst.ok((select assigned_to is not null from public.enquiries where product_text='50 boxes of pens'), 'new enquiry is auto-assigned');
+select tst.ok((select reference like 'ENQ-%' from public.enquiries where product_text='50 boxes of pens'), 'new enquiry has a reference');
+select tst.ok((select r.key = 'sales_manager' from public.enquiries e join public.profiles p on p.id=e.assigned_to join public.roles r on r.id=p.role_id where e.product_text='50 boxes of pens'), 'assigned to a sales manager, not the super admin');
+select tst.ok((select p.email = 'pending@t.test' from public.enquiries e join public.profiles p on p.id=e.assigned_to where e.product_text='50 boxes of pens'), 'work is spread: the sales manager with fewer open enquiries gets it');
+select tst.ok(exists(select 1 from public.notifications n join public.enquiries e on n.dedupe_key = 'enq-new:'||e.id where e.product_text='50 boxes of pens' and n.recipient_id = e.assigned_to and n.title like '%assigned to you'), 'assignee gets an "assigned to you" alert');
+select tst.count_is($$select count(*) from public.notifications n join public.enquiries e on n.dedupe_key = 'enq-new:'||e.id where e.product_text='50 boxes of pens' and n.recipient_id = e.assigned_to$$, 1, 'assignee is alerted exactly once');
+select tst.ok(exists(select 1 from public.automation_runs where rule_key='enquiry_assign' and status='success'), 'assignment is logged');
+
+-- duplicate prevention
+select tst.count_is($$select public.auto_notify('enquiry_notify_staff','a0000000-0000-0000-0000-000000000004','x',null,'/admin','info','dupe-test') + public.auto_notify('enquiry_notify_staff','a0000000-0000-0000-0000-000000000004','x',null,'/admin','info','dupe-test')$$, 1, 'same dedupe key never notifies twice');
+select tst.fails($$select public.auto_notify('enquiry_notify_staff','a0000000-0000-0000-0000-000000000004','x',null,'https://evil.example','info','bad-link')$$, 'notification links must stay inside /admin');
+
+-- email gating
+select tst.count_is($$select public.auto_enqueue_email('enquiry_ack','customer','jane@buyer.test','s','b','mail-1')$$, 0, 'no email queued while email is off');
+update public.automation_settings set email_enabled = true;
+select tst.count_is($$select public.auto_enqueue_email('enquiry_ack','customer','jane@buyer.test','s','b','mail-1')$$, 0, 'no email queued while the rule channel is off');
+update public.automation_rules set notify_email = true where key = 'enquiry_ack';
+select tst.count_is($$select public.auto_enqueue_email('enquiry_ack','customer','jane@buyer.test','s','b','mail-1') + public.auto_enqueue_email('enquiry_ack','customer','jane@buyer.test','s','b','mail-1')$$, 1, 'email queued once when both switches are on');
+insert into public.enquiries(customer_id, product_text) values ((select id from public.customers limit 1), 'ack test item');
+select tst.ok(exists(select 1 from public.notification_outbox where dedupe_key like 'enq-ack:%' and subject like 'We have received your enquiry ENQ-%'), 'acknowledgement email queued with the reference');
+select tst.fails($$update public.automation_rules set notify_email = true where key = 'enquiry_assign'$$, 'email cannot be enabled on a rule that does not send email');
+
+-- outbox retries with back-off, then failure
+select tst.ok((select count(*) from public.outbox_claim(10)) >= 1, 'outbox claim returns due emails');
+select tst.ok((select status from public.notification_outbox where dedupe_key='mail-1') = 'sending', 'claimed email is marked sending');
+select public.outbox_complete((select id from public.notification_outbox where dedupe_key='mail-1'), false, 'smtp down');
+select tst.ok((select status='pending' and attempts=1 and next_attempt_at > now() from public.notification_outbox where dedupe_key='mail-1'), 'failed send is retried later with back-off');
+update public.notification_outbox set attempts = max_attempts where dedupe_key='mail-1';
+select public.outbox_complete((select id from public.notification_outbox where dedupe_key='mail-1'), false, 'smtp down');
+select tst.ok((select status from public.notification_outbox where dedupe_key='mail-1') = 'failed', 'email fails permanently after max attempts');
+select tst.ok(exists(select 1 from public.notifications where title = 'Email could not be delivered'), 'administrators are told about a failed email');
+update public.automation_settings set email_enabled = false;
+
+-- scheduled reminders
+update public.enquiries set created_at = now() - interval '30 hours' where product_text='50 boxes of pens';
+update public.enquiries set follow_up_date = current_date - 1 where product_text='100 reams A4 paper';
+select tst.ok(public.run_automations() >= 2, 'engine run creates reminders');
+select tst.ok(exists(select 1 from public.notifications where title like 'Unanswered enquiry ENQ-%'), 'unanswered-enquiry reminder created');
+select tst.ok(exists(select 1 from public.notifications where title like 'Follow-up due: ENQ-%'), 'follow-up reminder created');
+select tst.count_is($$select public.run_automations()$$, 0, 'an immediate second run creates nothing (not due, no duplicates)');
+update public.automation_rules set next_run_at = now() - interval '1 minute' where key = 'enquiry_unanswered';
+select tst.count_is($$select public.run_automations()$$, 0, 'a forced re-run in the same period creates no duplicate reminders');
+
+-- failure isolation, retry and error reporting
+alter function public.auto_quotation_pending(jsonb) rename to auto_quotation_pending_real;
+create function public.auto_quotation_pending(p jsonb) returns integer language plpgsql as $f$ begin raise exception 'boom'; end $f$;
+update public.automation_rules set next_run_at = now() - interval '1 minute' where key in ('quotation_pending','enquiry_followup');
+select public.run_automations();
+select tst.ok((select status = 'error' from public.automation_runs where rule_key='quotation_pending' order by started_at desc limit 1), 'a failing rule is logged as an error');
+select tst.ok((select consecutive_failures = 1 and next_run_at > now() and next_run_at <= now() + interval '6 minutes' from public.automation_rules where key='quotation_pending'), 'a failing rule is retried in about 5 minutes');
+select tst.ok((select status = 'success' from public.automation_runs where rule_key='enquiry_followup' order by started_at desc limit 1), 'other rules still run when one fails');
+select tst.ok(exists(select 1 from public.notifications where title = 'Automation failed: Chase quotations with no decision'), 'administrators are notified of a failing rule');
+-- restore the real function
+drop function public.auto_quotation_pending(jsonb);
+alter function public.auto_quotation_pending_real(jsonb) rename to auto_quotation_pending;
+update public.automation_rules set consecutive_failures = 0, last_error = null where key = 'quotation_pending';
+
+-- quotations
+insert into public.quotations(number, customer_id, status, issue_date, valid_until, prepared_by)
+  values ('T-Q-1', (select id from public.customers limit 1), 'sent', current_date - 5, current_date - 1, (select id from public.profiles where email='sales@t.test'));
+insert into public.quotations(number, customer_id, status, issue_date, valid_until, prepared_by)
+  values ('T-Q-2', (select id from public.customers limit 1), 'sent', current_date - 4, current_date + 1, (select id from public.profiles where email='sales@t.test')),
+         ('T-Q-3', (select id from public.customers limit 1), 'draft', current_date - 9, null, null);
+select public.auto_quotation_pending('{"days_pending":3,"repeat_days":3,"days_expiring":2}');
+select tst.ok(exists(select 1 from public.notifications where title = 'Quotation T-Q-1 has expired'), 'expired quotation flagged');
+select tst.ok(exists(select 1 from public.notifications where title = 'Quotation T-Q-2 expires soon'), 'quotation nearing expiry flagged');
+select tst.ok(exists(select 1 from public.notifications where title = 'No decision yet on quotation T-Q-2'), 'pending quotation chased');
+select tst.ok(not exists(select 1 from public.notifications where title like '%T-Q-3%'), 'draft quotations are never chased');
+select tst.count_is($$select public.auto_quotation_pending('{"days_pending":3,"repeat_days":3,"days_expiring":2}')$$, 0, 'quotation reminders are not duplicated');
+
+-- supplier quote comparison
+select tst.admin();
+insert into public.suppliers(name) values ('Cheap Co'), ('Dear Co');
+insert into public.supplier_quotes(supplier_id, enquiry_id, product_text, unit_price, quantity, additional_costs, currency) values
+ ((select id from public.suppliers where name='Cheap Co'), (select id from public.enquiries where product_text='50 boxes of pens'), 'Pens', 100, 10, 500, 'KES'),
+ ((select id from public.suppliers where name='Dear Co'),  (select id from public.enquiries where product_text='50 boxes of pens'), 'pens ', 110, 10, 0, 'KES'),
+ ((select id from public.suppliers where name='Dear Co'),  (select id from public.enquiries where product_text='50 boxes of pens'), 'Pens', 1, 10, 0, 'USD');
+select tst.ok((select supplier_name from public.supplier_quote_comparison where value_rank = 1 and currency='KES') = 'Dear Co', 'best value includes extra costs (110 beats 100+50)');
+select tst.count_is($$select count(*) from public.supplier_quote_comparison where currency='USD' and quotes_compared = 1$$, 1, 'quotes in different currencies are not compared');
+select tst.count_is($$select count(*) from public.supplier_quote_comparison where currency='KES' and quotes_compared = 2$$, 2, 'item names are matched ignoring case and spaces');
+select public.auto_quote_comparison('{}');
+select tst.ok(exists(select 1 from public.notifications where title like 'Supplier quotes compared for ENQ-%' and body like '%Best value: Dear Co%'), 'comparison alert names the best-value supplier');
+select tst.count_is($$select public.auto_quote_comparison('{}')$$, 0, 'comparison alert is not repeated');
+
+-- purchase order notices
+insert into public.purchase_orders(supplier_id, status, created_by) values ((select id from public.suppliers where name='Dear Co'), 'draft', 'a0000000-0000-0000-0000-000000000003');
+update public.purchase_orders set status = 'pending_approval';
+select tst.ok(exists(select 1 from public.notifications n join public.profiles p on p.id=n.recipient_id where p.email='director@t.test' and n.title like 'Purchase order PO-%needs approval'), 'approver notified when a PO needs approval');
+select tst.as_user('a0000000-0000-0000-0000-000000000002');
+update public.purchase_orders set status = 'approved';
+select tst.admin();
+select tst.ok(exists(select 1 from public.notifications n join public.profiles p on p.id=n.recipient_id where p.email='procure@t.test' and n.title like 'Send order PO-%'), 'procurement prompted to send the order after approval');
+select tst.ok(exists(select 1 from public.notifications where title like 'Purchase order PO-%approved'), 'approval notice created');
+
+-- tenders: checklist and deadlines (module is off by default, so the rule must not act until it is on)
+insert into public.tenders(reference, procuring_entity, title) values ('T-OFF','Test Entity','Off test');
+select tst.count_is($$select count(*) from public.tender_checklist_items$$, 0, 'no checklist is generated while the tenders module is off');
+delete from public.tenders;
+update public.modules set enabled = true where key = 'tenders';
+insert into public.tenders(reference, procuring_entity, title, submission_deadline, eligibility_requirements) values ('T-1','Test Entity','Stationery supply', now() + interval '2 days', 'Local suppliers only');
+select tst.ok((select count(*) from public.tender_checklist_items) >= 11, 'checklist generated for a new tender (template + eligibility + deadline)');
+select tst.ok(exists(select 1 from public.tender_checklist_items where source='eligibility' and label like '%Local suppliers only%'), 'checklist includes the tender''s own eligibility notes');
+select tst.count_is($$select public.auto_generate_tender_checklist((select id from public.tenders limit 1))$$, 0, 'regenerating a checklist never duplicates items');
+select tst.count_is($$select public.auto_tender_deadlines('{"days_1":7,"days_2":3,"days_3":1}')$$, 2, 'deadline reminder sent (director + super admin hold tenders.manage? counted per recipient)');
+select tst.count_is($$select public.auto_tender_deadlines('{"days_1":7,"days_2":3,"days_3":1}')$$, 0, 'deadline reminder is not repeated');
+select tst.ok(exists(select 1 from public.notifications where title like 'Tender closes in 2 days%'), 'reminder states days remaining');
+
+-- inventory and deliveries only act when the module is on
+select tst.count_is($$select public.auto_low_stock_scan('{}')$$, 0, 'low-stock scan finds nothing with no stock');
+update public.modules set enabled = true where key in ('inventory','orders');
+insert into public.warehouses(name) values ('Main');
+insert into public.product_variants(product_id, name, reorder_level) values ((select id from public.products where slug='pub-product'), 'Std', 10);
+insert into public.stock_movements(variant_id, warehouse_id, movement_type, quantity) values ((select id from public.product_variants limit 1), (select id from public.warehouses limit 1), 'receipt', 8);
+select tst.ok(exists(select 1 from public.notifications where title like 'Low stock:%'), 'a movement leaving stock at/below reorder level raises an alert');
+insert into public.stock_movements(variant_id, warehouse_id, movement_type, quantity) values ((select id from public.product_variants limit 1), (select id from public.warehouses limit 1), 'receipt', 1);
+select tst.count_is($$select count(*) from public.notifications where title like 'Low stock:%' and recipient_id='a0000000-0000-0000-0000-000000000005'$$, 1, 'low-stock alert is not repeated within the week');
+insert into public.sales_orders(customer_id, status) values ((select id from public.customers limit 1), 'confirmed');
+insert into public.deliveries(sales_order_id) values ((select id from public.sales_orders limit 1));
+update public.deliveries set status = 'delivered';
+select tst.ok(exists(select 1 from public.notifications where title like 'Delivery DN-% delivered'), 'delivery status change notifies order staff');
+update public.modules set enabled = false where key in ('inventory','orders');
+
+-- daily summary
+select tst.count_is($$select (public.auto_daily_summary('{}') > 0)::int$$, 1, 'daily summary created');
+select tst.ok(exists(select 1 from public.notifications where title like 'Daily summary%' and body like 'Enquiries:%'), 'summary reports real enquiry counts');
+select tst.ok(not exists(select 1 from public.notifications where title like 'Daily summary%' and body like 'Stock:%'), 'summary omits modules that are switched off');
+select tst.count_is($$select public.auto_daily_summary('{}')$$, 0, 'only one daily summary per day');
+
+-- permissions and privacy
+select tst.as_user('a0000000-0000-0000-0000-000000000004');
+select tst.count_is($$select count(*) from public.automation_rules$$, 0, 'sales manager cannot see automation rules');
+select tst.fails($$select public.run_automation_now('daily_summary')$$, 'sales manager cannot run automations');
+select tst.ok((select count(*) from public.notifications) >= 1, 'staff can read their own notifications');
+select tst.ok((select count(*) = 0 from public.notifications where recipient_id <> auth.uid()), 'staff never see anyone else''s notifications');
+select tst.affects($$update public.notifications set read_at = now()$$, (select count(*)::int from public.notifications), 'staff can mark their own notifications read');
+select tst.fails($$update public.notifications set title = 'changed'$$, 'staff cannot edit notification text');
+select tst.fails($$insert into public.notifications(recipient_id,title,dedupe_key) values (auth.uid(),'forged','f1')$$, 'staff cannot forge notifications');
+select tst.fails($$select public.auto_notify('x', auth.uid(), 't', null, null, null, 'k')$$, 'internal engine functions are not callable by staff');
+select tst.count_is($$select count(*) from public.notification_outbox$$, 0, 'outbox hidden from staff without permission');
+select tst.as_user('a0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.automation_rules where key='daily_summary'$$, 1, 'director can view automation rules');
+select tst.affects($$update public.automation_rules set enabled = false where key='daily_summary'$$, 0, 'director (view only) cannot change rules');
+select tst.count_is($$select count(*) from public.notification_outbox$$, 0, 'director cannot read the outbox');
+select tst.as_user('a0000000-0000-0000-0000-000000000001');
+select tst.works($$update public.automation_rules set schedule_minutes = 120, params = '{"run_hour": 6}' where key='daily_summary'$$, 'super admin can change schedule and settings');
+select tst.fails($$update public.automation_rules set params = '{"run_hour": "x"}' where key='daily_summary'$$, 'settings must be numbers');
+select tst.fails($$update public.automation_rules set params = '{"run_hour": 6, "extra": 1}' where key='daily_summary'$$, 'settings cannot be added');
+select tst.fails($$update public.automation_rules set kind = 'event' where key='daily_summary'$$, 'what a rule does cannot be changed');
+select tst.fails($$insert into public.automation_rules(key,name,description,category,kind) values ('evil_rule','x','x','system','event')$$, 'admins cannot add rules');
+select tst.works($$select public.run_automation_now('housekeeping')$$, 'super admin can run an automation now');
+select tst.fails($$select public.run_automation_now('enquiry_ack')$$, 'event automations cannot be "run now"');
+select tst.admin();
+select tst.ok(exists(select 1 from public.audit_log where table_name='automation_rules'), 'rule changes are in the activity log');
+update public.automation_rules set enabled = false where key = 'enquiry_assign';
+insert into public.enquiries(customer_id, product_text) values ((select id from public.customers limit 1), 'unassigned item');
+select tst.ok((select assigned_to is null from public.enquiries where product_text='unassigned item'), 'switching a rule off stops it');
+update public.automation_rules set enabled = true where key = 'enquiry_assign';
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;
