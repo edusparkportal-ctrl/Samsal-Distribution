@@ -18,6 +18,10 @@ export default function PrivacyPage() {
       crumb="Privacy Policy"
       title="Privacy Policy"
       intro="What personal information we collect through this website, why we collect it, how we handle it and the choices you have."
+      downloads={[
+        { label: "PDF", href: "/legal/SAMSAL-Privacy-Policy-DRAFT.pdf" },
+        { label: "Word (.docx)", href: "/legal/SAMSAL-Privacy-Policy-DRAFT.docx" },
+      ]}
     >
       <LegalSection id="who" title="1. Who we are">
         <p>

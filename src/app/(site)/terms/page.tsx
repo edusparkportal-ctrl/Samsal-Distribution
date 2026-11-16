@@ -18,6 +18,10 @@ export default function TermsPage() {
       crumb="Terms of Service"
       title="Terms of Service"
       intro="The terms that apply when you use this website and request quotations from SAMSAL."
+      downloads={[
+        { label: "PDF", href: "/legal/SAMSAL-Terms-and-Conditions-DRAFT.pdf" },
+        { label: "Word (.docx)", href: "/legal/SAMSAL-Terms-and-Conditions-DRAFT.docx" },
+      ]}
     >
       <LegalSection id="about" title="1. About these terms">
         <p>

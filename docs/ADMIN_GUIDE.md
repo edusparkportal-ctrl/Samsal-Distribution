@@ -78,3 +78,10 @@ SAMSAL's HR outsourcing service is built and ready but **switched off**. While i
 - Staff archive records from the admin. Permanent deletion (for example to honour an erasure request) is reserved for the Super Administrator.
 - The activity log records that a candidate record changed and which fields, but never the personal details themselves.
 - To advertise the service publicly, add it yourself under **Website > Services** once the legal steps are complete. That is a separate, deliberate step so that nothing goes public by accident.
+
+## Legal documents (Terms and Conditions, Privacy Policy)
+Downloadable drafts are in `public/legal/` (PDF and Word) and linked from the website's **Terms** and **Privacy** pages. They are drafts for review by a qualified Kenyan adviser: every item SAMSAL still has to supply is highlighted in yellow in the files, and nothing in them is assumed.
+
+- **To change them:** edit the Markdown in `docs/legal/` (or have the adviser edit the Word file and copy the changes back), then run `python3 scripts/build-legal-docs.py` (needs Python with `python-docx`, and LibreOffice) and commit the regenerated files.
+- **When the adviser approves them:** delete the "Drafting notes" section and the draft banner text, update the website pages to match, set `legal.reviewed` to `true` in `src/config/site.ts`, fill in the company number, address and data-protection registration there, and regenerate the files. Until then the draft files are kept out of search results.
+

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 import { PageHero } from "@/components/ui";
 import { placeholders, site } from "@/config/site";
 
@@ -8,12 +8,15 @@ export function LegalPage({
   title,
   crumb,
   intro,
+  downloads,
   children,
 }: {
   eyebrow: string;
   title: string;
   crumb: string;
   intro: string;
+  /** Downloadable copies of this document, e.g. PDF and Word files kept in /public/legal. */
+  downloads?: { label: string; href: string }[];
   children: ReactNode;
 }) {
   return (
@@ -33,6 +36,21 @@ export function LegalPage({
                   to be completed by SAMSAL. Draft dated {site.legal.draftDate}.
                 </p>
               </div>
+            </div>
+          )}
+          {downloads && downloads.length > 0 && (
+            <div className="mb-10 flex flex-col gap-3 rounded-lg border border-grey-200 bg-grey p-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-navy">Download a copy of this document</p>
+              <ul className="flex flex-wrap gap-3">
+                {downloads.map((d) => (
+                  <li key={d.href}>
+                    <a href={d.href} download className="btn-outline inline-flex min-h-[44px] items-center gap-2 px-4 text-sm">
+                      <Download aria-hidden="true" size={16} />
+                      {d.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <div className="legal-prose space-y-10">{children}</div>
