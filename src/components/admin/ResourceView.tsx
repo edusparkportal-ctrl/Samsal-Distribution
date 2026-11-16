@@ -149,8 +149,11 @@ async function loadLookups(sb: Sb, def: ResourceDef, row: Row | null): Promise<L
 
   for (const f of def.fields) {
     if (f.type === "relation") {
-      const { data } = await sb.from(f.table).select(`id, ${f.labelCol}`).order(f.orderBy ?? f.labelCol).limit(500);
-      lookups.relations[f.name] = ((data ?? []) as unknown as Row[]).map((o) => ({ value: o.id, label: String(o[f.labelCol]) }));
+      const base = sb.from(f.table).select(`id, ${f.labelCol}`);
+      // Optional restriction, e.g. ["deleted_at", null] hides archived records from the dropdown.
+      const scoped = !f.filter ? base : f.filter[1] === null ? base.is(f.filter[0], null) : base.eq(f.filter[0], f.filter[1] as string | number | boolean);
+      const { data } = await scoped.order(f.orderBy ?? f.labelCol).limit(500);
+      lookups.relations[f.name] = ((data ?? []) as unknown as Row[]).map((o) => ({ value: o.id, label: String(o[f.labelCol] ?? "Unnamed") }));
     }
     if (f.type === "media") {
       const { data } = await sb.from("media_assets").select("id, title, file_name, folder, mime_type, bucket, storage_path, alt_text").eq("bucket", "public-media").is("deleted_at", null).order("created_at", { ascending: false }).limit(300);

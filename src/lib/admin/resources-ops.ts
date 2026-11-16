@@ -8,6 +8,9 @@ import type { ResourceDef } from "./resources";
 
 const opt = (values: string[]) => values.map((v) => ({ value: v, label: v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) }));
 const STATUS_TONE = { draft: "grey", pending_approval: "amber", approved: "teal", sent: "teal", partially_received: "amber", received: "green", cancelled: "red", confirmed: "teal", processing: "amber", partially_delivered: "amber", delivered: "green", invoiced: "green", scheduled: "grey", in_transit: "amber", failed: "red" } as const;
+const HR_REQUEST_TONE = { open: "amber", sourcing: "amber", shortlisted: "teal", filled: "green", on_hold: "grey", closed: "grey", cancelled: "red" } as const;
+const HR_CANDIDATE_TONE = { new: "grey", screened: "amber", shortlisted: "teal", placed: "green", not_suitable: "red", withdrawn: "grey" } as const;
+const HR_PLACEMENT_TONE = { proposed: "grey", interview: "amber", offered: "teal", active: "green", ended: "grey", declined: "red" } as const;
 const CURRENCY = { type: "text", name: "currency", label: "Currency", max: 3, pattern: /^[A-Z]{3}$/, patternMessage: "Use a 3-letter code such as KES." } as const;
 
 export const OPS_RESOURCES: Record<string, ResourceDef> = {
@@ -183,5 +186,72 @@ export const OPS_RESOURCES: Record<string, ResourceDef> = {
       { type: "textarea", name: "internal_notes", label: "Internal notes", max: 3000, rows: 4 },
     ],
     links: [{ name: "categories", label: "Product categories involved", table: "tender_categories", fk: "tender_id", other: "category_id", optionsTable: "product_categories", optionLabel: "name", noSort: true }],
+  },
+
+  // ---- HR Outsourcing (module `hr`, ships disabled). Internal records only; nothing here is public. ----
+  hr_requisitions: {
+    key: "hr_requisitions", base: "/admin/hr", route: "requisitions", table: "hr_requisitions", label: "Staffing requests", singular: "Staffing request", pk: "id",
+    description: "Requests from clients for staff. Record what the client actually asked for.",
+    permission: "hr.manage", viewPermission: "hr.view", module: "hr", publicSite: false, createdBy: "created_by",
+    softDelete: "deleted_at", orderBy: "created_at", newLabel: "Add staffing request", filterStatus: true,
+    statusOptions: opt(["open", "sourcing", "shortlisted", "filled", "on_hold", "closed", "cancelled"]),
+    columns: [{ key: "reference", label: "Reference" }, { key: "client_name", label: "Client" }, { key: "title", label: "Role" }, { key: "headcount", label: "Staff needed" }, { key: "status", label: "Status", badge: HR_REQUEST_TONE }],
+    fields: [
+      { type: "text", name: "client_name", label: "Client organisation", required: true, max: 200 },
+      { type: "relation", name: "customer_id", label: "Linked customer (optional)", table: "customers", labelCol: "contact_name", filter: ["deleted_at", null], help: "Link to a customer you already have in Customers." },
+      { type: "text", name: "title", label: "Role requested", required: true, max: 200 },
+      { type: "textarea", name: "description", label: "Requirements", max: 3000, rows: 4, help: "Duties, experience, working pattern, as stated by the client." },
+      { type: "number", name: "headcount", label: "Number of staff needed", required: true, min: 1, max: 10000, default: 1 },
+      { type: "text", name: "location", label: "Work location", max: 120 },
+      { type: "date", name: "desired_start", label: "Desired start date" },
+      { type: "select", name: "arrangement", label: "Arrangement", required: true, default: "placement", options: [{ value: "placement", label: "Placement (we introduce, the client employs)" }, { value: "managed_staffing", label: "Managed staffing (we employ)" }], help: "Managed staffing means SAMSAL becomes the employer. Confirm the legal and payroll set-up before offering it." },
+      { type: "select", name: "status", label: "Status", required: true, default: "open", options: opt(["open", "sourcing", "shortlisted", "filled", "on_hold", "closed", "cancelled"]) },
+      { type: "relation", name: "owner_id", label: "Responsible person", table: "profiles", labelCol: "full_name" },
+      { type: "textarea", name: "internal_notes", label: "Internal notes", max: 3000, rows: 3 },
+    ],
+  },
+
+  hr_candidates: {
+    key: "hr_candidates", base: "/admin/hr", route: "candidates", table: "hr_candidates", label: "Candidates", singular: "Candidate", pk: "id",
+    description: "People available for placement. Keep personal data to a minimum: do not record ID numbers, KRA PINs, bank details, dates of birth or health information here.",
+    permission: "hr.manage", viewPermission: "hr.view", module: "hr", publicSite: false, createdBy: "created_by",
+    softDelete: "deleted_at", orderBy: "created_at", newLabel: "Add candidate", filterStatus: true,
+    statusOptions: opt(["new", "screened", "shortlisted", "placed", "not_suitable", "withdrawn"]),
+    columns: [{ key: "full_name", label: "Name" }, { key: "location", label: "Location" }, { key: "availability", label: "Availability" }, { key: "status", label: "Status", badge: HR_CANDIDATE_TONE }, { key: "consent_recorded", label: "Consent recorded" }],
+    fields: [
+      { type: "text", name: "full_name", label: "Full name", required: true, max: 160 },
+      { type: "text", name: "phone", label: "Telephone", max: 40 },
+      { type: "email", name: "email", label: "Email" },
+      { type: "text", name: "location", label: "Location", max: 120 },
+      { type: "textarea", name: "skills", label: "Skills and experience (summary)", max: 2000, rows: 4 },
+      { type: "text", name: "availability", label: "Availability", max: 200 },
+      { type: "text", name: "source", label: "How we found them", max: 200 },
+      { type: "select", name: "status", label: "Status", required: true, default: "new", options: opt(["new", "screened", "shortlisted", "placed", "not_suitable", "withdrawn"]) },
+      { type: "checkbox", name: "consent_recorded", label: "The candidate has agreed to us holding their details", default: false, help: "Tick only once you have their agreement, then enter the date below." },
+      { type: "date", name: "consent_date", label: "Date consent was given", help: "Required when consent is ticked." },
+      { type: "date", name: "retention_review_date", label: "Review or delete by", help: "Do not keep candidate details longer than needed." },
+      { type: "textarea", name: "notes", label: "Internal notes", max: 3000, rows: 3 },
+    ],
+    beforeSave(values) {
+      if (values.consent_recorded && !values.consent_date) throw new Error("Enter the date consent was given.");
+    },
+  },
+
+  hr_placements: {
+    key: "hr_placements", base: "/admin/hr", route: "placements", table: "hr_placements", label: "Placements", singular: "Placement", pk: "id",
+    description: "A candidate put forward for a staffing request, and how it progressed.",
+    permission: "hr.manage", viewPermission: "hr.view", module: "hr", publicSite: false, createdBy: "created_by",
+    softDelete: "deleted_at", orderBy: "created_at", newLabel: "Record placement", filterStatus: true,
+    statusOptions: opt(["proposed", "interview", "offered", "active", "ended", "declined"]),
+    columns: [{ key: "requisition_id", label: "Request", lookup: { table: "hr_requisitions", labelCol: "reference" } }, { key: "candidate_id", label: "Candidate", lookup: { table: "hr_candidates", labelCol: "full_name" } }, { key: "status", label: "Status", badge: HR_PLACEMENT_TONE }, { key: "start_date", label: "Start" }],
+    fields: [
+      { type: "relation", name: "requisition_id", label: "Staffing request", table: "hr_requisitions", labelCol: "reference", orderBy: "created_at", filter: ["deleted_at", null], required: true },
+      { type: "relation", name: "candidate_id", label: "Candidate", table: "hr_candidates", labelCol: "full_name", filter: ["deleted_at", null], required: true },
+      { type: "select", name: "status", label: "Status", required: true, default: "proposed", options: opt(["proposed", "interview", "offered", "active", "ended", "declined"]) },
+      { type: "date", name: "start_date", label: "Start date" },
+      { type: "date", name: "end_date", label: "End date" },
+      { type: "text", name: "fee_note", label: "Agreed fee or terms (note)", max: 500, help: "A short note of what was agreed with the client." },
+      { type: "textarea", name: "notes", label: "Notes", max: 3000, rows: 3 },
+    ],
   },
 };

@@ -6,7 +6,8 @@ Sign in at `/admin/login`. The menu shows only the areas your role allows. Every
 | Role | Intended for |
 | --- | --- |
 | Super Administrator | Everything, including users, roles and module switches. The last active Super Administrator cannot be removed or demoted. |
-| Director | Read access to all business modules, activity log and reports; approves purchase orders; manages quotations and tenders. |
+| HR Manager | Runs the HR Outsourcing module (staffing requests, candidates, placements); read access to enquiries. Has no access while the module is off. |
+| Director | Read access to all business modules (including HR Outsourcing when it is on), activity log and reports; approves purchase orders; manages quotations and tenders. |
 | Procurement Manager | Suppliers, supplier quotes and purchase orders (cannot approve; approval needs the approve permission, which the Director has). |
 | Sales Manager | Enquiries, customers, quotations, sales orders and deliveries. |
 | Inventory Manager | Warehouses, stock items, stock movements and balances. |
@@ -55,3 +56,25 @@ Once sent, a quotation is locked; to change it, cancel it and prepare a new one.
 
 ## Legal pages
 The Privacy Policy and Terms are drafts and are marked for review by a qualified Kenyan adviser before they are relied on. They are hidden from search engines until `legal.reviewed` is set to `true` in `src/config/site.ts` after that review.
+
+## HR Outsourcing (a separate business line, off by default)
+SAMSAL's HR outsourcing service is built and ready but **switched off**. While it is off, the menu does not show it and the database refuses every read and write on its data, even for a Super Administrator.
+
+**Switching it on:** sign in as a Super Administrator, open **Settings > Modules** and turn on **HR Outsourcing**. No code change or redeploy is needed. Then give people the **HR Manager** role (or the `hr.view` / `hr.manage` permissions) in **Settings > Users**. Switching it off again stops access immediately; nothing is deleted.
+
+**Before you switch it on, settle these with a qualified Kenyan adviser** (this system does not decide them for you):
+- Registration or licensing required to run a recruitment or placement agency, and for managed staffing where SAMSAL becomes the employer.
+- Employer obligations if SAMSAL employs people: contracts, PAYE, NSSF, SHIF, housing levy, insurance.
+- Data protection: registration as a data controller or processor, a privacy notice for candidates, how long candidate details are kept, and how erasure requests are handled.
+- Working capital: wages are normally paid before the client pays.
+
+**What it contains**
+- **Staffing requests**: a client's request for staff (role, number needed, location, start date, status). The arrangement is either *placement* (we introduce, the client employs) or *managed staffing* (we employ).
+- **Candidates**: people available for placement. Only minimal details are stored. Do **not** record ID numbers, KRA PINs, bank details, dates of birth, health information or CV files. Tick "consent" only once the candidate has agreed, and enter the date. Set a "review or delete by" date.
+- **Placements**: a candidate put forward for a request, from proposed to interview, offer, active and ended.
+
+**Good to know**
+- All HR records are internal. Nothing from this module appears on the public website.
+- Staff archive records from the admin. Permanent deletion (for example to honour an erasure request) is reserved for the Super Administrator.
+- The activity log records that a candidate record changed and which fields, but never the personal details themselves.
+- To advertise the service publicly, add it yourself under **Website > Services** once the legal steps are complete. That is a separate, deliberate step so that nothing goes public by accident.

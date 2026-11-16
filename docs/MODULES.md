@@ -15,3 +15,6 @@ and (2) the user holds one of its permissions. The database enforces both throug
 ## Ideas the structure already allows
 Customer accounts/portal (needs its own auth role separate from staff), invoicing and payments (M-Pesa integration), tender document generation,
 supplier performance scoring, stock-on-order and automatic stock movement from purchase receipts and deliveries, email sending of quotations.
+
+## Worked example: HR Outsourcing (`hr`)
+Migration `20261112000011_hr_outsourcing.sql` is a complete example of the steps above: a module row (disabled), permissions, a role, three tables with Row Level Security that requires both the permission and the module switch (`can('hr.view','hr')`), activity-log triggers (candidates in `pii` mode, so values are never copied), registry entries in `src/lib/admin/resources-ops.ts`, a navigation entry in `src/lib/modules.ts`, and three three-line pages under `src/app/admin/(panel)/hr/`.

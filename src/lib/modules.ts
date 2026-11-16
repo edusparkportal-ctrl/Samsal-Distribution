@@ -17,7 +17,7 @@ import type { Permission } from "@/lib/auth/permissions";
 
 export type ModuleKey =
   | "website" | "crm" | "quotations" | "suppliers" | "procurement"
-  | "inventory" | "orders" | "tenders" | "reports" | "audit";
+  | "inventory" | "orders" | "tenders" | "hr" | "reports" | "audit";
 
 export type NavIcon =
   | "globe" | "building" | "users" | "share" | "home" | "package" | "tag" | "wrench" | "factory" | "image" | "search" | "megaphone" | "file"
@@ -95,6 +95,16 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     ],
   },
   { key: "tenders", label: "Tenders", icon: "gavel", items: [{ label: "Tenders", href: "/admin/tenders", permission: "tenders.view" }] },
+  {
+    key: "hr",
+    label: "HR Outsourcing",
+    icon: "users",
+    items: [
+      { label: "Staffing requests", href: "/admin/hr/requisitions", permission: "hr.view" },
+      { label: "Candidates", href: "/admin/hr/candidates", permission: "hr.view" },
+      { label: "Placements", href: "/admin/hr/placements", permission: "hr.view" },
+    ],
+  },
   { key: "reports", label: "Reports", icon: "chart", items: [{ label: "Reports", href: "/admin/reports", permission: "reports.view" }] },
   { key: "audit", label: "Activity log", icon: "shield", items: [{ label: "Activity log", href: "/admin/audit", permission: "audit.view" }] },
 ];

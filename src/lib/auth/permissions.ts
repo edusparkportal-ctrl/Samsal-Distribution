@@ -26,6 +26,8 @@ export const PERMISSIONS = {
   "orders.manage": "Create and edit sales orders and deliveries",
   "tenders.view": "View tenders",
   "tenders.manage": "Create and edit tenders",
+  "hr.view": "View HR outsourcing requests, candidates and placements",
+  "hr.manage": "Create and edit HR outsourcing requests, candidates and placements",
   "audit.view": "View the activity log",
   "reports.view": "View and export reports",
 } as const;

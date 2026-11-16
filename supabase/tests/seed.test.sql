@@ -20,7 +20,7 @@ begin
   assert n = 1, 'mission/vision are the existing About copy; address/registration/PIN/hours must be empty';
   select count(*) into n from public.products where packaging is not null; assert n = 0, 'no pack sizes invented';
   select count(*) into n from public.product_specifications where value not in ('Specified per order','Supplied by you','Provided after sourcing'); assert n = 0, 'no specification values invented';
-  -- modules ship with inventory/orders/tenders off
-  select count(*) into n from public.modules where key in ('inventory','orders','tenders') and enabled; assert n = 0, 'inventory/orders/tenders must start disabled';
+  -- modules ship with inventory/orders/tenders/hr off
+  select count(*) into n from public.modules where key in ('inventory','orders','tenders','hr') and enabled; assert n = 0, 'inventory/orders/tenders/hr must start disabled';
   raise notice 'SEED TESTS PASSED';
 end $$;

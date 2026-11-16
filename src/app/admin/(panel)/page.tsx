@@ -28,6 +28,7 @@ export default async function Dashboard() {
   add(ctx.has("suppliers.view") && ctx.moduleEnabled("suppliers"), "Active suppliers", "/admin/suppliers", () => sb.from("suppliers").select("id", head).eq("is_active", true).is("deleted_at", null));
   add(ctx.has("purchasing.approve") && ctx.moduleEnabled("procurement"), "POs awaiting approval", "/admin/procurement/purchase-orders?status=pending_approval", () => sb.from("purchase_orders").select("id", head).eq("status", "pending_approval"));
   add(ctx.has("tenders.view") && ctx.moduleEnabled("tenders"), "Open tenders", "/admin/tenders", () => sb.from("tenders").select("id", head).in("bid_status", ["monitoring", "preparing", "ready"]).is("deleted_at", null));
+  add(ctx.has("hr.view") && ctx.moduleEnabled("hr"), "Open staffing requests", "/admin/hr/requisitions?status=open", () => sb.from("hr_requisitions").select("id", head).in("status", ["open", "sourcing", "shortlisted"]).is("deleted_at", null));
 
   // Setup checklist: things the site still needs from the business (nothing is invented for them).
   type Check = { label: string; done: boolean; href: string };

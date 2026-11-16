@@ -153,7 +153,7 @@ Images are original vector illustrations (`public/images/illustrations`), config
 ## 11b. Version 3: admin platform (Supabase)
 
 Version 3 adds `/admin`: content management, enquiries/CRM, quotations with PDF, suppliers, purchase orders, inventory,
-sales orders, deliveries, tenders, reports and an activity log, with role-based access. Start with:
+sales orders, deliveries, tenders, an HR outsourcing line (off until enabled), reports and an activity log, with role-based access. Start with:
 
 - `docs/SUPABASE_SETUP.md` - database, auth and environment setup
 - `docs/DEPLOYMENT.md` - Vercel deployment and first-build checklist

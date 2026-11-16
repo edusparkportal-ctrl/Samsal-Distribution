@@ -233,6 +233,58 @@ select tst.fails($$insert into public.media_assets(bucket,storage_path,file_name
 select tst.anon();
 select tst.count_is($$select count(*) from public.media_assets where bucket='private-docs'$$, 0, 'anonymous visitors cannot see the private index');
 
+
+-- ---------------- HR outsourcing module (migration 0011): off by default, off means OFF ----------------
+select tst.admin();
+insert into auth.users(id,email) values ('a0000000-0000-0000-0000-000000000009','hr@t.test');
+update public.profiles set is_active = true, role_id = (select id from public.roles where key='hr_manager') where email='hr@t.test';
+select tst.ok(not (select enabled from public.modules where key='hr'), 'HR module ships disabled');
+select tst.ok(exists(select 1 from public.permissions where key in ('hr.view','hr.manage') having count(*) = 2), 'HR permissions exist');
+-- module off: nobody can read or write, not even the Super Administrator
+select tst.as_user('a0000000-0000-0000-0000-000000000009');
+select tst.fails($$insert into public.hr_requisitions(client_name,title) values ('Client A','Cleaner')$$, 'HR manager cannot write while the module is off');
+select tst.as_user('a0000000-0000-0000-0000-000000000001');
+select tst.fails($$insert into public.hr_requisitions(client_name,title) values ('Client A','Cleaner')$$, 'Super Administrator cannot write while the HR module is off');
+select tst.count_is($$select count(*) from public.hr_requisitions$$, 0, 'nothing readable while the HR module is off');
+-- switch the module on (as a Super Administrator would in Settings > Modules)
+select tst.admin();
+update public.modules set enabled = true where key = 'hr';
+select tst.as_user('a0000000-0000-0000-0000-000000000009');
+select tst.works($$insert into public.hr_requisitions(client_name,title,headcount,created_by) values ('Client A','Cleaner',3,auth.uid())$$, 'HR manager can create a staffing request once enabled');
+select tst.ok((select reference from public.hr_requisitions limit 1) like 'HRQ-%', 'staffing request gets an HRQ- reference');
+select tst.fails($$insert into public.hr_requisitions(client_name,title,headcount) values ('Client A','Cleaner',0)$$, 'headcount must be at least 1');
+select tst.fails($$insert into public.hr_requisitions(client_name,title,status) values ('Client A','Cleaner','bogus')$$, 'invalid request status rejected');
+select tst.fails($$insert into public.hr_candidates(full_name,consent_recorded) values ('Jane Doe', true)$$, 'consent needs a date');
+select tst.works($$insert into public.hr_candidates(full_name,phone,consent_recorded,consent_date,created_by) values ('Jane Doe','0700000000', true, current_date, auth.uid())$$, 'candidate with recorded consent saved');
+select tst.works($$insert into public.hr_candidates(full_name) values ('John Roe')$$, 'candidate without consent can be recorded as not yet consented');
+select tst.fails($$insert into public.hr_candidates(full_name,email) values ('Bad Email','not-an-email')$$, 'candidate email validated');
+select tst.works($$insert into public.hr_placements(requisition_id,candidate_id,start_date,end_date) select r.id, c.id, date '2027-01-01', date '2027-06-30' from public.hr_requisitions r, public.hr_candidates c where c.full_name='Jane Doe'$$, 'placement created');
+select tst.fails($$insert into public.hr_placements(requisition_id,candidate_id) select r.id, c.id from public.hr_requisitions r, public.hr_candidates c where c.full_name='Jane Doe'$$, 'same candidate cannot be placed twice on one request');
+select tst.fails($$insert into public.hr_placements(requisition_id,candidate_id,start_date,end_date) select r.id, c.id, date '2027-03-01', date '2027-02-01' from public.hr_requisitions r, public.hr_candidates c where c.full_name='John Roe'$$, 'placement end date cannot precede start date');
+select tst.affects($$delete from public.hr_candidates$$, 0, 'HR manager cannot permanently delete candidates');
+select tst.works($$update public.hr_candidates set deleted_at = now() where full_name='John Roe'$$, 'HR manager can archive a candidate');
+-- other roles
+select tst.as_user('a0000000-0000-0000-0000-000000000004');
+select tst.count_is($$select count(*) from public.hr_requisitions$$, 0, 'sales manager cannot see HR requests');
+select tst.fails($$insert into public.hr_requisitions(client_name,title) values ('X','Y')$$, 'sales manager cannot create HR requests');
+select tst.as_user('a0000000-0000-0000-0000-000000000006');
+select tst.count_is($$select count(*) from public.hr_candidates$$, 0, 'content editor cannot see candidates');
+select tst.as_user('a0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.hr_requisitions$$, 1, 'director can view HR requests');
+select tst.fails($$insert into public.hr_requisitions(client_name,title) values ('X','Y')$$, 'director is read-only on HR');
+select tst.anon();
+select tst.fails($$select count(*) from public.hr_candidates$$, 'anonymous visitors have no access to candidates at all');
+select tst.fails($$insert into public.hr_candidates(full_name) values ('Anon')$$, 'anonymous visitors cannot write candidates');
+-- audit: candidate personal data never copied into the log
+select tst.admin();
+select tst.ok(exists(select 1 from public.audit_log where table_name='hr_candidates' and old_data is null and new_data is null and changed_fields is not null), 'candidate activity logged without values (field names only)');
+select tst.ok(exists(select 1 from public.audit_log where table_name='hr_requisitions' and new_data is not null), 'staffing request changes logged');
+-- switching off again stops access immediately
+update public.modules set enabled = false where key = 'hr';
+select tst.as_user('a0000000-0000-0000-0000-000000000009');
+select tst.count_is($$select count(*) from public.hr_candidates$$, 0, 'switching the module off stops access immediately');
+select tst.admin();
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;
