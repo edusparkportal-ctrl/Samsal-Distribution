@@ -20,3 +20,33 @@ test.** If it fails, the error will name a file and line; the most likely causes
 ## Rollback
 Vercel keeps previous deployments: promote an earlier one from the Deployments list. Database migrations are not rolled back
 automatically; write a new migration to undo a schema change.
+
+## Automatic database migrations (GitHub to Supabase)
+
+The folder `supabase/migrations/` is the schema. Every time a change to it reaches the `main` branch, the workflow `.github/workflows/supabase-migrate.yml` runs two jobs:
+
+1. **Test migrations** builds the whole schema on a throwaway Postgres and runs the database test suite (row-level-security and seed checks). If anything fails, nothing is applied.
+2. **Apply to Supabase** links the live project and applies only the **new** migration files, in order. It first prints a dry run so the log shows exactly what is about to change.
+
+Pull requests that touch `supabase/` run job 1 only, so a broken migration is caught before it is merged.
+
+### One-time setup (about 5 minutes)
+In GitHub open the repository, then **Settings > Secrets and variables > Actions > New repository secret**, and add two secrets:
+
+| Secret | Where to get it |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Supabase dashboard > your account (top right) > **Access Tokens** > Generate new token. Copy it once. |
+| `SUPABASE_DB_PASSWORD` | The database password you chose when the project was created. If it is lost: Supabase dashboard > **Project Settings > Database > Reset database password**, then use the new one. |
+
+Never paste either value into chat, code or an issue. The workflow stops with a clear message if a secret is missing.
+
+Optional but recommended: **Settings > Environments > production > Required reviewers**, so a person must approve each database change before it is applied.
+
+### Day-to-day rules
+- **Add a new file; never edit an old one.** Create `supabase/migrations/<timestamp>_<what_it_does>.sql` whose timestamp is later than the last file (for example `20261120090000_add_supplier_ratings.sql`). The workflow fails if an already-merged migration is edited, renamed or deleted, because the live database has already run it.
+- **Make changes backwards compatible** (add columns and tables; avoid dropping or renaming something the running website still uses). The website and the database deploy separately and are not updated in the same instant.
+- **A migration cannot be undone automatically.** To reverse a change, add a new migration that does the opposite.
+- `supabase/seed.sql` is for new empty databases only and is never run automatically.
+- Check progress under the **Actions** tab. A red run means nothing was applied, or the run stopped at the failing file.
+- Changes made by hand in the Supabase dashboard are not in GitHub. Make schema changes through migration files so the repository stays the single source of truth.
+

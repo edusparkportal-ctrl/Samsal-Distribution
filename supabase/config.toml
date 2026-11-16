@@ -1,0 +1,4 @@
+# Minimal Supabase CLI config. The CLI needs this file to treat supabase/ as a project.
+# The hosted project is selected at deploy time with `supabase link --project-ref`; see
+# .github/workflows/supabase-migrate.yml and docs/DEPLOYMENT.md.
+project_id = "samsal-distribution"

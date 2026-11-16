@@ -156,12 +156,14 @@ Version 3 adds `/admin`: content management, enquiries/CRM, quotations with PDF,
 sales orders, deliveries, tenders, an HR outsourcing line (off until enabled), reports and an activity log, with role-based access. Start with:
 
 - `docs/SUPABASE_SETUP.md` - database, auth and environment setup
-- `docs/DEPLOYMENT.md` - Vercel deployment and first-build checklist
+- `docs/DEPLOYMENT.md` - Vercel deployment, first-build checklist, and automatic database migrations (GitHub Actions)
 - `docs/ADMIN_GUIDE.md` - how staff use it
 - `docs/MODULES.md` - how to add a module
 - `docs/OUTSTANDING_ISSUES.md` - what was and was not verified, and known gaps
 
 Without the Supabase variables the public site runs from its built-in content (Version 2 behaviour). Run the database tests locally with `npm run db:test` (needs PostgreSQL).
+
+Schema changes are plain SQL files in `supabase/migrations/`. Merging a new file to `main` applies it to Supabase automatically, after the database tests pass; see the last section of `docs/DEPLOYMENT.md` for the one-time secrets setup and the rules.
 
 ## 12. Structure
 

@@ -1,0 +1,120 @@
+# Automatic database migrations.
+#
+# Whenever a change to supabase/migrations/** lands on `main`, this workflow
+#   1. proves the whole migration set on a scratch Postgres and runs the database test suite, then
+#   2. applies only the NEW migration files to the live Supabase project.
+#
+# Pull requests that touch supabase/** run step 1 only, so a broken migration is caught before merge.
+# One-time setup (repository secrets) is described in docs/DEPLOYMENT.md.
+
+name: Database migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "supabase/seed.sql"
+      - ".github/workflows/supabase-migrate.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+  workflow_dispatch:
+
+# Never run two migration jobs at once, and never cancel one half-way through.
+concurrency:
+  group: supabase-migrate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_PROJECT_REF: xzjlxonnwmxzybxoupjd
+
+jobs:
+  test:
+    name: Test migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Migration files are named correctly and applied ones are untouched
+        run: |
+          set -euo pipefail
+          bad=0
+          for f in supabase/migrations/*.sql; do
+            if ! [[ "$(basename "$f")" =~ ^[0-9]{14}_[a-z0-9_]+\.sql$ ]]; then
+              echo "::error file=$f::Migration files must be named <14-digit timestamp>_<snake_case_name>.sql"
+              bad=1
+            fi
+          done
+          # A migration that has already reached `main` has (or may have) been applied to the live
+          # database. Editing it would silently diverge the repository from the database.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            before="${{ github.event.before }}"
+            if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+              changed="$(git diff --diff-filter=MDR --name-only "$before" HEAD -- supabase/migrations || true)"
+              if [ -n "$changed" ]; then
+                echo "::error::Existing migrations were modified, renamed or deleted:"
+                echo "$changed"
+                echo "Never edit an applied migration. Add a NEW migration file that makes the change."
+                bad=1
+              fi
+            fi
+          fi
+          exit $bad
+
+      - name: Apply migrations and run database tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: ./supabase/tests/run-local.sh
+
+  deploy:
+    name: Apply to Supabase
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment in GitHub (Settings > Environments > production)
+    # if you want a human to approve each database change before it is applied.
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the secrets are configured
+        run: |
+          missing=0
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::Repository secret SUPABASE_ACCESS_TOKEN is not set"; missing=1; }
+          [ -n "$SUPABASE_DB_PASSWORD" ]  || { echo "::error::Repository secret SUPABASE_DB_PASSWORD is not set"; missing=1; }
+          [ "$missing" = 0 ] || { echo "See docs/DEPLOYMENT.md, 'Automatic database migrations'."; exit 1; }
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link the Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Show the migrations that are about to be applied
+        run: supabase db push --dry-run
+
+      - name: Apply new migrations
+        run: supabase db push --yes
