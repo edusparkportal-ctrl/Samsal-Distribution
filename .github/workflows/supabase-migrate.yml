@@ -113,8 +113,10 @@ jobs:
       - name: Link the Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
+      # Newer CLI versions default to a LOCAL database; the target must be named explicitly. Older versions
+      # call the same switch --linked, so fall back to that if --remote is not recognised.
       - name: Show the migrations that are about to be applied
-        run: supabase db push --dry-run
+        run: supabase db push --dry-run --remote || supabase db push --dry-run --linked
 
       - name: Apply new migrations
-        run: supabase db push --yes
+        run: supabase db push --yes --remote || supabase db push --yes --linked
