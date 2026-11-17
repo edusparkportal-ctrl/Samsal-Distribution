@@ -50,3 +50,8 @@ Optional but recommended: **Settings > Environments > production > Required revi
 - Check progress under the **Actions** tab. A red run means nothing was applied, or the run stopped at the failing file.
 - Changes made by hand in the Supabase dashboard are not in GitHub. Make schema changes through migration files so the repository stays the single source of truth.
 
+## Automation settings
+
+- No extra variables are needed for in-app notifications and reminders.
+- For emails (only after a sending domain is verified): `RESEND_API_KEY`, `AUTOMATION_FROM_EMAIL`, and `CRON_SECRET` (any random string of 16+ characters). `vercel.json` schedules `/api/automation/dispatch` daily; the route refuses requests without the secret.
+- The 5-minute scheduler is created by migration `20261116120200_automation_schedule.sql` using pg_cron. If that migration printed a notice that pg_cron is unavailable, enable the extension in Supabase (Database > Extensions) and re-run it.

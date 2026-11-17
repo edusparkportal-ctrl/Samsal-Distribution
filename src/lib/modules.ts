@@ -17,11 +17,11 @@ import type { Permission } from "@/lib/auth/permissions";
 
 export type ModuleKey =
   | "website" | "crm" | "quotations" | "suppliers" | "procurement"
-  | "inventory" | "orders" | "tenders" | "hr" | "reports" | "audit";
+  | "inventory" | "orders" | "tenders" | "hr" | "automation" | "reports" | "audit";
 
 export type NavIcon =
   | "globe" | "building" | "users" | "share" | "home" | "package" | "tag" | "wrench" | "factory" | "image" | "search" | "megaphone" | "file"
-  | "inbox" | "contact" | "filetext" | "truck" | "clipboard" | "warehouse" | "arrows" | "cart" | "gavel" | "chart" | "shield" | "settings" | "key" | "layers";
+  | "inbox" | "contact" | "filetext" | "truck" | "clipboard" | "warehouse" | "arrows" | "cart" | "gavel" | "chart" | "shield" | "settings" | "key" | "layers" | "zap";
 
 export type AdminNavItem = { label: string; href: string; permission: Permission };
 export type AdminModuleDef = {
@@ -71,6 +71,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     icon: "clipboard",
     items: [
       { label: "Supplier quotes", href: "/admin/procurement/supplier-quotes", permission: "purchasing.view" },
+      { label: "Quote comparison", href: "/admin/procurement/quote-comparison", permission: "purchasing.view" },
       { label: "Purchase orders", href: "/admin/procurement/purchase-orders", permission: "purchasing.view" },
     ],
   },
@@ -94,7 +95,15 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
       { label: "Deliveries", href: "/admin/orders/deliveries", permission: "orders.view" },
     ],
   },
-  { key: "tenders", label: "Tenders", icon: "gavel", items: [{ label: "Tenders", href: "/admin/tenders", permission: "tenders.view" }] },
+  {
+    key: "tenders",
+    label: "Tenders",
+    icon: "gavel",
+    items: [
+      { label: "Tenders", href: "/admin/tenders", permission: "tenders.view" },
+      { label: "Document checklists", href: "/admin/checklists", permission: "tenders.view" },
+    ],
+  },
   {
     key: "hr",
     label: "HR Outsourcing",
@@ -103,6 +112,16 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
       { label: "Staffing requests", href: "/admin/hr/requisitions", permission: "hr.view" },
       { label: "Candidates", href: "/admin/hr/candidates", permission: "hr.view" },
       { label: "Placements", href: "/admin/hr/placements", permission: "hr.view" },
+    ],
+  },
+  {
+    key: "automation",
+    label: "Automation",
+    icon: "zap",
+    items: [
+      { label: "Control Centre", href: "/admin/automation", permission: "automation.view" },
+      { label: "Run log", href: "/admin/automation/logs", permission: "automation.view" },
+      { label: "Email outbox", href: "/admin/automation/outbox", permission: "automation.manage" },
     ],
   },
   { key: "reports", label: "Reports", icon: "chart", items: [{ label: "Reports", href: "/admin/reports", permission: "reports.view" }] },

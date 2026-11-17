@@ -10,6 +10,9 @@ import { requirePublicEnv } from "./env";
  *  - Allowed uses (keep this list short):
  *      1. saving a public website enquiry (visitors have no database access)
  *      2. creating/inviting staff accounts (Supabase Auth admin API)
+ *      3. the automation dispatcher (src/lib/automation/dispatch.ts), which sends queued emails and
+ *         runs the scheduler tick. It is only reachable with the CRON_SECRET or by a signed-in
+ *         administrator holding automation.manage.
  *    Everything else must use createSupabaseServerClient() so RLS applies.
  *  - Callers must do their own permission check BEFORE using it.
  */

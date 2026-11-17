@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { inspectAttachment } from "@/lib/file-check";
 import { MIN_FILL_MS, verifyToken } from "@/lib/form-token";
 import { saveWebsiteEnquiry } from "@/lib/enquiries";
+import { dispatchOutbox } from "@/lib/automation/dispatch";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   LIMITS,
@@ -193,6 +194,14 @@ export async function POST(req: Request) {
   // ---- Store in the CRM (never throws; null when the database is not configured or unavailable) ----
   const reference = await saveWebsiteEnquiry(kind, values, attachmentName);
   const saved = reference !== null;
+  // Send the acknowledgement email the database just queued (does nothing unless email automation is on).
+  if (saved) {
+    try {
+      await dispatchOutbox(5);
+    } catch {
+      /* the enquiry is already saved; the daily dispatch will pick the email up */
+    }
+  }
   const thanks = {
     ok: true,
     message:

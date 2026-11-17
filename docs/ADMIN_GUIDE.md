@@ -85,3 +85,28 @@ Downloadable drafts are in `public/legal/` (PDF and Word) and linked from the we
 - **To change them:** edit the Markdown in `docs/legal/` (or have the adviser edit the Word file and copy the changes back), then run `python3 scripts/build-legal-docs.py` (needs Python with `python-docx`, and LibreOffice) and commit the regenerated files.
 - **When the adviser approves them:** delete the "Drafting notes" section and the draft banner text, update the website pages to match, set `legal.reviewed` to `true` in `src/config/site.ts`, fill in the company number, address and data-protection registration there, and regenerate the files. Until then the draft files are kept out of search results.
 
+## Automation (Control Centre)
+
+Open **Automation > Control Centre**. Each automation can be switched on or off, scheduled and tuned there. Everything works on your real records; nothing is sample data.
+
+| Automation | What it does | Needs |
+|---|---|---|
+| Assign new enquiries | Gives each new enquiry to the staff member (with the "manage enquiries" permission) who has the fewest open ones | Customers module |
+| Alert staff to new enquiries | Bell notification to the assignee and enquiry managers | Customers module |
+| Acknowledge enquiries by email | Emails the customer their reference | Email switched on |
+| Unanswered enquiry and follow-up reminders | Reminds the assignee after N hours, and on the follow-up date | Customers module |
+| Chase quotations | Reminds the preparer when a sent quotation has no decision, before it expires, and when it has expired | Quotations module |
+| Compare supplier quotes | Ranks valid quotes for the same enquiry and item by landed cost per unit and names the best value | Procurement module |
+| Purchase order notices | Tells approvers a PO needs approval; after approval prompts procurement to send it (and emails the supplier if email is on) | Procurement module |
+| Tender checklists and deadline reminders | Builds a document checklist for each tender; reminds at 7, 3 and 1 days (editable) and once if the deadline passes | Tenders module |
+| Low-stock, delivery notices | Alerts when stock reaches its reorder level; notifies order staff and, if email is on, the customer | Inventory / Orders modules |
+| Daily summary | Morning summary of counts for administrators | none |
+
+Notes
+- **Email is off by default.** It needs a verified sending domain. Until then everything still works through the bell in the top bar and nothing is queued. When you have a domain: verify it in Resend, set `RESEND_API_KEY`, `AUTOMATION_FROM_EMAIL` and `CRON_SECRET` in Vercel, then switch email on in the Control Centre.
+- Automations for a module that is switched off simply wait; switching the module on activates them.
+- **Run log** shows every run, errors included. A failing scheduled automation retries after 5, 10, 20 minutes and so on, and administrators are notified once a day per problem. **Email outbox** shows queued emails with attempts and a Retry button.
+- Duplicates are prevented: the same alert is never sent to the same person twice.
+- Stock is never changed automatically. Recording stock movements stays a deliberate action by inventory staff; the automation only watches the balances.
+- The tender checklist template (Tenders > Document checklists) is a generic starting point, not a statement of what any tender requires. Check each tender document.
+- Scheduling runs inside the database (every 5 minutes through pg_cron). If it is ever unavailable, use **Run now**; a daily backup run also happens through Vercel Cron.

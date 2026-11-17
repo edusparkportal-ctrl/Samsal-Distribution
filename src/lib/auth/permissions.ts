@@ -28,6 +28,8 @@ export const PERMISSIONS = {
   "tenders.manage": "Create and edit tenders",
   "hr.view": "View HR outsourcing requests, candidates and placements",
   "hr.manage": "Create and edit HR outsourcing requests, candidates and placements",
+  "automation.view": "View automation rules, run logs and the outbox",
+  "automation.manage": "Switch automations on or off, change schedules and settings, run them now and retry failures",
   "audit.view": "View the activity log",
   "reports.view": "View and export reports",
 } as const;
