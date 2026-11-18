@@ -39,6 +39,7 @@ export const PERMISSIONS = {
   "people.leave_approve": "Approve leave for any employee (as an HR approver)",
   "people.docs": "Open HR documents such as contracts and onboarding files",
   "people.self": "Use My HR: own leave, attendance, tasks and reviews",
+  "finance.claims": "Submit and see your own expense claims",
   "finance.view": "View the finance dashboard, ledger, budgets and invoices",
   "finance.manage": "Record income, expenses and budgets",
   "finance.invoices": "Create and issue customer invoices and record receipts",

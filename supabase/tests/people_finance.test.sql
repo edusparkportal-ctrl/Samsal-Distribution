@@ -309,6 +309,155 @@ select tst.count_is($$select count(*) from public.payroll_runs$$, 0, 'with the m
 select tst.admin();
 update public.modules set enabled = true where key = 'people';
 
+-- ================= FINANCE (stage 3) =================
+select tst.admin();
+insert into public.role_permissions select r.id, 'finance.claims' from public.roles r where r.key = 'staff_basic' on conflict do nothing;
+insert into public.customers (company_name, contact_name, email) values ('Test Customer Ltd', 'Cathy Customer', 'cathy@example.test');
+insert into public.suppliers (name) values ('Test Supplier Ltd');
+insert into public.sales_orders (customer_id, status) select id, 'delivered' from public.customers where company_name = 'Test Customer Ltd';
+insert into public.sales_order_items (order_id, line_no, description, quantity, unit_price) select id, 1, 'Test goods', 10, 1500 from public.sales_orders;
+insert into public.purchase_orders (supplier_id, status) select id, 'received' from public.suppliers where name = 'Test Supplier Ltd';
+insert into public.purchase_order_items (po_id, line_no, description, quantity, unit_price, received_quantity) select id, 1, 'Supplies', 20, 400, 20 from public.purchase_orders;
+
+create table fin_ids as select (select id from public.sales_orders limit 1) as so, (select id from public.purchase_orders limit 1) as po;
+grant all on fin_ids to public;
+select tst.ok((select amount from public.finance_transactions where source = 'payroll') = 50000, 'recording payroll as paid posts its net pay to the ledger');
+
+-- access
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.finance_transactions$$, 0, 'HR officer cannot see the ledger');
+select tst.count_is($$select count(*) from public.invoices$$, 0, 'HR officer cannot see invoices');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.finance_transactions$$, 0, 'ordinary staff cannot see the ledger');
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.count_is($$select count(*) from public.finance_transactions$$, 1, 'accountant sees the ledger');
+
+-- manual ledger entries
+select tst.works($$insert into public.finance_transactions(kind, category_id, amount, description) select 'income', id, 1000, 'Consulting income' from public.finance_categories where system_key='other_income'$$, 'accountant records manual income');
+select tst.fails($$insert into public.finance_transactions(kind, category_id, amount, description) select 'income', id, 1000, 'Wrong kind' from public.finance_categories where system_key='payroll'$$, 'a category of the wrong kind is refused');
+select tst.fails($$insert into public.finance_transactions(kind, category_id, amount, description) select 'expense', id, -5, 'Negative' from public.finance_categories where system_key='operating'$$, 'negative amounts are refused');
+select tst.affects($$update public.finance_transactions set amount = 1 where source = 'payroll'$$, 0, 'system ledger entries cannot be edited');
+select tst.affects($$delete from public.finance_transactions where source = 'payroll'$$, 0, 'system ledger entries cannot be deleted');
+select tst.works($$update public.finance_transactions set description = 'Consulting income (corrected)' where source = 'manual'$$, 'a manual entry can be corrected');
+
+-- budgets
+select tst.works($$insert into public.budgets(name, category_id, period_start, period_end, amount) select 'Payroll budget', id, date_trunc('year', current_date)::date, (date_trunc('year', current_date) + interval '1 year - 1 day')::date, 600000 from public.finance_categories where system_key='payroll'$$, 'accountant sets a budget');
+select tst.ok((select actual from public.budget_vs_actual where name='Payroll budget') = 50000, 'budget vs actual uses real ledger entries');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.budgets$$, 0, 'HR officer cannot see budgets');
+
+-- invoices
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$insert into public.invoices(customer_id, tax_rate, status) select id, 10, 'paid' from public.customers where company_name='Test Customer Ltd'$$, 'accountant drafts an invoice');
+select tst.ok((select status from public.invoices) = 'draft', 'a new invoice is always a draft, whatever status was sent');
+select tst.fails($$select public.issue_invoice((select id from public.invoices))$$, 'an invoice with no lines cannot be issued');
+select tst.works($$insert into public.invoice_items(invoice_id, line_no, description, quantity, unit_price) select id, 1, 'Goods', 10, 1000 from public.invoices$$, 'lines are added to the draft');
+select tst.ok((select total from public.invoice_totals) = 11000, 'total = lines plus the tax rate entered by a person (10% of 10,000)');
+select tst.fails($$update public.invoices set status = 'issued'$$, 'status cannot be changed directly');
+select tst.works($$select public.issue_invoice((select id from public.invoices))$$, 'a person issues the invoice');
+select tst.ok((select issued_by from public.invoices) = 'b0000000-0000-0000-0000-000000000005', 'who issued it is recorded');
+select tst.ok((select due_date from public.invoices) = current_date + 30, 'a due date is set (30 days) when none was given');
+select tst.affects($$update public.invoices set notes = 'changed'$$, 0, 'an issued invoice cannot be edited');
+select tst.fails($$update public.invoice_items set unit_price = 1$$, 'issued invoice lines are locked');
+select tst.fails($$insert into public.invoice_payments(invoice_id, amount) select id, 100 from public.invoices$$, 'payments cannot be inserted directly');
+select tst.fails($$select public.record_invoice_payment((select id from public.invoices), 99999, current_date, 'bank', 'X')$$, 'overpaying is refused');
+select tst.works($$select public.record_invoice_payment((select id from public.invoices), 4000, current_date, 'mpesa', 'MP123')$$, 'a part payment is recorded');
+select tst.ok((select status from public.invoices) = 'partially_paid', 'invoice becomes partially paid');
+select tst.ok((select balance from public.invoice_totals) = 7000, 'balance is reduced');
+select tst.fails($$select public.void_invoice((select id from public.invoices), 'mistake')$$, 'an invoice with payments cannot be voided');
+select tst.works($$select public.record_invoice_payment((select id from public.invoices), 7000, current_date, 'bank', 'BK1')$$, 'the rest is paid');
+select tst.ok((select status from public.invoices) = 'paid', 'invoice is paid');
+select tst.ok((select count(*) from public.finance_transactions where source='invoice_payment') = 2, 'receipts are posted to the ledger');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.invoice_payments$$, 0, 'ordinary staff cannot see receipts');
+
+-- invoice from a delivered sales order
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$select public.create_invoice_from_order((select so from fin_ids))$$, 'a draft invoice can be created from a delivered order');
+select tst.ok((select status from public.invoices where sales_order_id is not null) = 'draft', 'it is only a draft: a person must issue it');
+select tst.ok((select total from public.invoice_totals where invoice_id = (select id from public.invoices where sales_order_id is not null)) = 15000, 'lines were copied from the order');
+select tst.fails($$select public.create_invoice_from_order((select so from fin_ids))$$, 'the same order cannot be invoiced twice');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.fails($$select public.create_invoice_from_order((select so from fin_ids))$$, 'HR officer cannot create invoices');
+
+-- supplier bills: approval before payment, preparer cannot pay
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$select public.create_bill_from_po((select po from fin_ids))$$, 'a draft bill can be created from a received purchase order');
+select tst.ok((select amount from public.supplier_bills) = 8000, 'bill value is the value actually received');
+select tst.fails($$select public.create_bill_from_po((select po from fin_ids))$$, 'the same order cannot be billed twice');
+select tst.fails($$select public.record_bill_payment((select id from public.supplier_bills), 8000, current_date, 'bank', 'PAYREF1')$$, 'a draft bill cannot be paid');
+select tst.fails($$update public.supplier_bills set status = 'approved'$$, 'bill status cannot be changed directly');
+select tst.works($$select public.submit_bill((select id from public.supplier_bills))$$, 'the bill is submitted for approval');
+select tst.fails($$select public.record_bill_payment((select id from public.supplier_bills), 8000, current_date, 'bank', 'PAYREF1')$$, 'a bill awaiting approval cannot be paid');
+select tst.fails($$select public.decide_approval((select id from public.approval_requests where subject='bill' and status='pending'), 'approved', null)$$, 'the preparer cannot approve their own bill');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='bill' and status='pending'), 'approved', null)) = 'approved', 'a finance approver approves the bill');
+select tst.admin();
+select tst.ok((select status from public.supplier_bills) = 'approved', 'bill is approved');
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.fails($$select public.record_bill_payment((select id from public.supplier_bills), 8000, current_date, 'bank', 'PAYREF1')$$, 'the person who prepared the bill cannot record its payment');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.fails($$select public.record_bill_payment((select id from public.supplier_bills), 8000, current_date, 'bank', '')$$, 'a payment reference is required');
+select tst.fails($$select public.record_bill_payment((select id from public.supplier_bills), 9000, current_date, 'bank', 'PAYREF1')$$, 'paying more than the bill is refused');
+select tst.works($$select public.record_bill_payment((select id from public.supplier_bills), 3000, current_date, 'bank', 'PAYREF1')$$, 'an approved bill can be part-paid by someone else');
+select tst.ok((select status from public.supplier_bills) = 'partially_paid', 'bill is partly paid');
+select tst.works($$select public.record_bill_payment((select id from public.supplier_bills), 5000, current_date, 'bank', 'PAYREF2')$$, 'the rest is paid');
+select tst.ok((select status from public.supplier_bills) = 'paid', 'bill is paid');
+select tst.ok((select count(*) from public.finance_transactions where source='bill_payment') = 2, 'payments are posted to the ledger');
+select tst.fails($$select public.void_bill((select id from public.supplier_bills), 'oops')$$, 'a paid bill cannot be voided');
+
+-- a rejected bill returns to draft
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$insert into public.supplier_bills(supplier_id, amount, bill_date) select id, 12345, current_date from public.suppliers$$, 'accountant captures a bill by hand');
+select tst.works($$select public.submit_bill((select id from public.supplier_bills where amount = 12345))$$, 'and submits it');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='bill' and status='pending'), 'rejected', 'Supplier invoice missing')) = 'rejected', 'finance rejects it with a reason');
+select tst.admin();
+select tst.ok((select status from public.supplier_bills where amount = 12345) = 'draft', 'a rejected bill goes back to draft');
+
+-- expense claims
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$insert into public.expense_claims(employee_id, category_id, amount, description) select e.id, c.id, 2000, 'Taxi to client' from public.employees e, public.finance_categories c where e.full_name = 'Alice Staff' and c.system_key = 'operating'$$, 'an employee submits an expense claim');
+select tst.fails($$insert into public.expense_claims(employee_id, category_id, amount, description) select (select id from public.employees where full_name = 'Alice Staff'), c.id, 1, 'x' from public.finance_categories c where c.system_key = 'sales'$$, 'a claim must use an expense category');
+select tst.count_is($$select count(*) from public.expense_claims$$, 1, 'the employee sees their own claim');
+select tst.fails($$update public.expense_claims set status = 'approved'$$, 'a claim cannot be approved by editing it');
+select tst.fails($$select public.decide_approval((select id from public.approval_requests where subject='expense' and status='pending' and title like 'Expense claim%'), 'approved', null)$$, 'the claimant cannot approve their own claim');
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.count_is($$select count(*) from public.expense_claims$$, 0, 'a colleague cannot see the claim');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.fails($$select public.record_expense_paid((select id from public.expense_claims), 'PAY999', current_date)$$, 'an unapproved claim cannot be reimbursed');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='expense' and status='pending' and title like 'Expense claim%'), 'approved', null)) = 'approved', 'finance approves the claim');
+select tst.fails($$select public.record_expense_paid((select id from public.expense_claims), '', current_date)$$, 'a payment reference is required');
+select tst.works($$select public.record_expense_paid((select id from public.expense_claims), 'MPESA-77', current_date)$$, 'reimbursement is recorded');
+select tst.admin();
+select tst.ok((select status from public.expense_claims) = 'paid_recorded', 'claim is paid_recorded');
+select tst.ok(exists(select 1 from public.finance_transactions where source = 'expense_claim' and amount = 2000), 'the reimbursement is posted to the ledger');
+
+-- cancelling a claim
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$insert into public.expense_claims(employee_id, category_id, amount, description) select e.id, c.id, 500, 'Parking' from public.employees e, public.finance_categories c where e.full_name = 'Alice Staff' and c.system_key = 'operating'$$, 'second claim');
+select tst.works($$select public.cancel_expense_claim((select id from public.expense_claims where amount = 500))$$, 'the claimant cancels a pending claim');
+select tst.admin();
+select tst.ok((select status from public.expense_claims where amount = 500) = 'cancelled', 'it is cancelled');
+select tst.ok(not exists(select 1 from public.approval_requests where subject = 'expense' and status = 'pending'), 'and its approval request is closed');
+
+-- reports and cash flow
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$select public.build_finance_report(current_date)$$, 'accountant builds the monthly report');
+select tst.ok((select (data -> 'by_currency' -> 0 ->> 'income')::numeric from public.finance_report_snapshots) = 12000, 'report income = manual 1,000 + receipts 11,000');
+select tst.ok((select count(*) from public.cash_flow_monthly) >= 1, 'cash flow view has data');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.fails($$select public.build_finance_report(current_date)$$, 'HR officer cannot build financial reports');
+select tst.count_is($$select count(*) from public.finance_report_snapshots$$, 0, 'HR officer cannot read financial reports');
+
+-- module off
+select tst.admin();
+update public.modules set enabled = false where key = 'finance';
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.count_is($$select count(*) from public.finance_transactions$$, 0, 'with the module switched off, the ledger cannot be read');
+select tst.admin();
+update public.modules set enabled = true where key = 'finance';
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;
