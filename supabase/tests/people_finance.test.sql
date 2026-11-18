@@ -1,0 +1,318 @@
+-- =====================================================================
+-- HR, Finance and approvals test suite. Run AFTER all migrations on a scratch database:
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls.test.sql
+-- Needs a Postgres where roles anon/authenticated exist and auth.uid() reads
+-- request.jwt.claim.sub (true on Supabase). Creates and removes test rows
+-- inside the schema "tst"; do NOT run against production data.
+-- =====================================================================
+drop schema if exists tst cascade;
+create schema tst;
+create table tst.results (n serial, passed boolean, label text, detail text);
+grant usage on schema tst to public;
+grant all on tst.results to public;
+grant usage on sequence tst.results_n_seq to public;
+
+create function tst.admin() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); end $$;
+create function tst.anon() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); set role anon; end $$;
+create function tst.as_user(u uuid) returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', u::text, false); set role authenticated; end $$;
+create function tst.ok(cond boolean, lbl text) returns void language plpgsql as $$ begin insert into tst.results(passed,label) values (coalesce(cond,false), lbl); end $$;
+create function tst.count_is(q text, expected bigint, lbl text) returns void language plpgsql as $$
+declare c bigint; begin execute q into c; insert into tst.results(passed,label,detail) values (c = expected, lbl, 'got '||c||' expected '||expected); end $$;
+create function tst.fails(q text, lbl text) returns void language plpgsql as $$
+begin
+  begin execute q; insert into tst.results(passed,label,detail) values (false, lbl, 'statement unexpectedly succeeded');
+  exception when others then insert into tst.results(passed,label,detail) values (true, lbl, sqlerrm); end;
+end $$;
+create function tst.works(q text, lbl text) returns void language plpgsql as $$
+begin
+  begin execute q; insert into tst.results(passed,label) values (true, lbl);
+  exception when others then insert into tst.results(passed,label,detail) values (false, lbl, sqlerrm); end;
+end $$;
+create function tst.affects(q text, expected int, lbl text) returns void language plpgsql as $$
+declare n int; begin execute q; get diagnostics n = row_count; insert into tst.results(passed,label,detail) values (n = expected, lbl, 'affected '||n||' expected '||expected); end $$;
+
+-- ---------------- fixtures ----------------
+select tst.admin();
+insert into auth.users(id,email) values
+ ('b0000000-0000-0000-0000-000000000001','super@t.test'),
+ ('b0000000-0000-0000-0000-000000000002','hr@t.test'),
+ ('b0000000-0000-0000-0000-000000000003','payroll@t.test'),
+ ('b0000000-0000-0000-0000-000000000004','fin1@t.test'),
+ ('b0000000-0000-0000-0000-000000000005','acct@t.test'),
+ ('b0000000-0000-0000-0000-000000000006','director@t.test'),
+ ('b0000000-0000-0000-0000-000000000007','alice@t.test'),
+ ('b0000000-0000-0000-0000-000000000008','bob@t.test'),
+ ('b0000000-0000-0000-0000-000000000009','fin2@t.test'),
+ ('b0000000-0000-0000-0000-00000000000a','hrhead@t.test'),
+ ('b0000000-0000-0000-0000-00000000000b','both@t.test'),
+ ('b0000000-0000-0000-0000-00000000000c','carol@t.test');
+select public.bootstrap_super_admin('super@t.test');
+insert into public.roles(key,name) values ('staff_basic','Staff'), ('hr_head','HR Head'), ('hr_fin_both','Both approvers');
+insert into public.role_permissions select r.id, p from public.roles r, unnest(array['people.view','people.manage','people.payroll_approve']) p where r.key='hr_head';
+insert into public.role_permissions select r.id, p from public.roles r, unnest(array['people.payroll_approve','finance.payroll_approve']) p where r.key='hr_fin_both';
+update public.profiles p set is_active = true, role_id = r.id from public.roles r
+  where (p.email, r.key) in (('hr@t.test','hr_officer'),('payroll@t.test','payroll_officer'),('fin1@t.test','finance_manager'),('fin2@t.test','finance_manager'),
+    ('acct@t.test','accountant'),('director@t.test','director'),('alice@t.test','staff_basic'),('bob@t.test','staff_basic'),('carol@t.test','staff_basic'),
+    ('hrhead@t.test','hr_head'),('both@t.test','hr_fin_both'));
+update public.modules set enabled = true where key in ('people','finance');
+
+insert into public.departments(name, code) values ('Operations', 'OPS');
+insert into public.employees(full_name, profile_id, department_id, job_title) values
+  ('Bob Manager',  (select id from public.profiles where email='bob@t.test'),   (select id from public.departments), 'Operations Manager'),
+  ('Carol Peer',   (select id from public.profiles where email='carol@t.test'), (select id from public.departments), 'Clerk');
+update public.departments set head_employee_id = (select id from public.employees where full_name='Bob Manager');
+insert into public.employees(full_name, profile_id, department_id, job_title, manager_id) values
+  ('Alice Staff', (select id from public.profiles where email='alice@t.test'), (select id from public.departments), 'Officer', (select id from public.employees where full_name='Bob Manager'));
+insert into public.employees(full_name, department_id) values ('No Manager Nick', (select id from public.departments));
+
+-- ---------------- organisation: directory access ----------------
+select tst.ok((select count(*) from public.employees) = 4, 'fixture: four employees');
+select tst.ok(exists(select 1 from public.modules where key in ('people','finance') group by () having count(*) = 2), 'people and finance modules exist');
+select tst.ok((select count(*) from public.approval_policies) = 4, 'default approval policies are seeded (leave, expense, bill, payroll)');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.employees$$, 4, 'HR officer sees the directory');
+select tst.works($$insert into public.employees(full_name) values ('New Hire')$$, 'HR officer can add an employee');
+select tst.affects($$delete from public.employees where full_name='New Hire'$$, 0, 'HR officer cannot permanently delete an employee');
+select tst.fails($$insert into public.approval_policies(subject, name) values ('leave','x')$$, 'HR officer cannot change approval policies');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.employees$$, 1, 'an employee sees only their own record');
+select tst.affects($$update public.employees set job_title = 'Boss'$$, 0, 'an employee cannot edit their own record');
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.count_is($$select count(*) from public.employees$$, 0, 'finance staff cannot read the employee directory');
+select tst.anon();
+select tst.fails($$select count(*) from public.employees$$, 'anonymous visitors cannot read employees');
+select tst.admin();
+update public.modules set enabled = false where key = 'people';
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.employees$$, 0, 'switching the HR module off stops all access');
+select tst.admin();
+update public.modules set enabled = true where key = 'people';
+select tst.fails($$update public.employees set manager_id = (select id from public.employees where full_name='Alice Staff') where full_name='Bob Manager'$$, 'a reporting-line loop is refused');
+
+-- ---------------- approvals engine ----------------
+select tst.admin();
+create temp table tst_ids(k text primary key, v uuid);
+grant all on tst_ids to public;
+-- leave-type request: Alice's leave, filed by the HR officer
+insert into tst_ids values ('leave', public.approval_submit('leave', gen_random_uuid(), 3,
+  (select id from public.employees where full_name='Alice Staff'), 'b0000000-0000-0000-0000-000000000002', 'Leave: Alice, 3 days', 'Annual leave', '/admin/approvals'));
+select tst.ok(exists(select 1 from public.notifications where recipient_id='b0000000-0000-0000-0000-000000000008' and title like 'Approval needed:%'), 'the line manager is told about the request');
+select tst.ok((select count(*) from public.approval_candidates((select v from tst_ids where k='leave'))) = 1, 'exactly one candidate: the line manager');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.approval_requests$$, 1, 'the employee can see a request about themselves');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='leave'), 'approved', null)$$, 'an employee cannot approve a request about themselves');
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.count_is($$select count(*) from public.approval_requests$$, 0, 'an unrelated colleague cannot see the request');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='leave'), 'approved', null)$$, 'an unrelated colleague cannot approve');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='leave'), 'approved', null)$$, 'the requester cannot approve their own request');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.count_is($$select count(*) from public.approval_requests$$, 1, 'the manager sees the request');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='leave'), 'rejected', '')$$, 'rejecting needs a reason');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='leave'), 'approved', 'ok')) = 'approved', 'the manager approves');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='leave'), 'approved', null)$$, 'a decided request cannot be decided again');
+select tst.admin();
+select tst.ok((select status from public.approval_requests where id=(select v from tst_ids where k='leave')) = 'approved', 'request is approved');
+select tst.ok(exists(select 1 from public.notifications where recipient_id='b0000000-0000-0000-0000-000000000002' and title like 'Approved:%'), 'the requester is told the outcome');
+select tst.ok(exists(select 1 from public.audit_log where table_name='approval_decisions'), 'decisions are in the activity log');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.fails($$insert into public.approval_requests(subject, record_id, steps, title) values ('leave', gen_random_uuid(), '[]', 'forged')$$, 'requests cannot be forged directly');
+select tst.fails($$insert into public.approval_decisions(request_id, step_no, decided_by, decision) values ((select v from tst_ids where k='leave'), 9, auth.uid(), 'approved')$$, 'decisions cannot be forged directly');
+select tst.fails($$update public.approval_requests set status = 'approved'$$, 'request status cannot be edited directly');
+
+-- fail closed, amounts, fallback
+select tst.admin();
+update public.approval_policies set is_active = false where subject = 'bill';
+select tst.fails($$select public.approval_submit('bill', gen_random_uuid(), 100, null, 'b0000000-0000-0000-0000-000000000005', 'Bill', null, null)$$, 'with no active policy nothing can be submitted for approval');
+update public.approval_policies set is_active = true where subject = 'bill';
+insert into public.approval_policies(subject, name, min_amount) values ('expense', 'Expenses over 100,000', 100000) returning id \gset big_
+insert into public.approval_policy_steps(policy_id, step_no, label, approver_type, permission_key) values
+  (:'big_id', 1, 'Finance', 'permission', 'finance.expense_approve'), (:'big_id', 2, 'Director sign-off', 'permission', 'approvals.view_all');
+insert into tst_ids values ('small', public.approval_submit('expense', gen_random_uuid(), 5000, null, 'b0000000-0000-0000-0000-000000000005', 'Expense 5,000', null, null));
+insert into tst_ids values ('big',   public.approval_submit('expense', gen_random_uuid(), 150000, null, 'b0000000-0000-0000-0000-000000000005', 'Expense 150,000', null, null));
+select tst.ok((select jsonb_array_length(steps) from public.approval_requests where id=(select v from tst_ids where k='small')) = 1, 'a small expense uses the one-step policy');
+select tst.ok((select jsonb_array_length(steps) from public.approval_requests where id=(select v from tst_ids where k='big')) = 2, 'a large expense uses the two-step policy');
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='small'), 'approved', null)$$, 'an accountant (no approval permission) cannot approve an expense');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='small'), 'approved', null)) = 'approved', 'a finance manager approves the small expense');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='big'), 'approved', null)) = 'next_step', 'step one of the large expense moves it to step two');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='big'), 'approved', null)$$, 'the same person cannot also approve step two');
+select tst.as_user('b0000000-0000-0000-0000-000000000009');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='big'), 'approved', null)$$, 'a finance manager is not the step-two approver (needs the director permission)');
+select tst.as_user('b0000000-0000-0000-0000-000000000006');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='big'), 'approved', null)) = 'approved', 'the director completes the large expense');
+
+-- no manager recorded: falls back to approvals.manage holders (super admin), never to the employee
+select tst.admin();
+insert into tst_ids values ('nomgr', public.approval_submit('leave', gen_random_uuid(), 1,
+  (select id from public.employees where full_name='No Manager Nick'), 'b0000000-0000-0000-0000-000000000002', 'Leave: Nick', null, null));
+select tst.ok(exists(select 1 from public.approval_candidates((select v from tst_ids where k='nomgr')) c where c = (select id from public.profiles where email='super@t.test')), 'with no manager recorded, an administrator decides');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='nomgr'), 'rejected', 'Not enough cover')) = 'rejected', 'administrator can reject with a reason');
+
+-- payroll: two different people, HR then Finance
+select tst.admin();
+insert into tst_ids values ('pay', public.approval_submit('payroll', gen_random_uuid(), 500000, null, 'b0000000-0000-0000-0000-000000000003', 'Payroll: November', null, null));
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='pay'), 'approved', null)$$, 'the payroll preparer cannot approve payroll');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='pay'), 'approved', null)$$, 'the Finance approver cannot jump ahead of the HR step');
+select tst.as_user('b0000000-0000-0000-0000-00000000000b');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='pay'), 'approved', null)) = 'next_step', 'a person holding both permissions approves the HR step');
+select tst.fails($$select public.decide_approval((select v from tst_ids where k='pay'), 'approved', null)$$, 'the same person cannot also approve the Finance step');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='pay'), 'approved', null)) = 'approved', 'a second person approves the Finance step');
+
+-- cancelling
+select tst.admin();
+insert into tst_ids values ('cx', public.approval_submit('leave', gen_random_uuid(), 2, (select id from public.employees where full_name='Alice Staff'), 'b0000000-0000-0000-0000-000000000002', 'Leave to cancel', null, null));
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.fails($$select public.cancel_approval((select v from tst_ids where k='cx'))$$, 'an outsider cannot cancel a request');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$select public.cancel_approval((select v from tst_ids where k='cx'))$$, 'the requester can cancel');
+select tst.admin();
+select tst.ok((select status from public.approval_requests where id=(select v from tst_ids where k='cx')) = 'cancelled', 'cancelled request is closed');
+
+-- ================= HUMAN RESOURCES (stage 2) =================
+select tst.admin();
+create table tst_dates as select (current_date + 7 + ((8 - extract(isodow from current_date + 7)::int) % 7))::date as mon;
+grant all on tst_dates to public;
+insert into public.role_permissions select r.id, 'people.self' from public.roles r where r.key = 'staff_basic' on conflict do nothing;
+insert into public.role_permissions select r.id, p from public.roles r, unnest(array['people.reviews']) p where r.key = 'hr_head' on conflict do nothing;
+insert into public.leave_types (name, days_per_year) values ('Annual test leave', 10), ('Unpaid test leave', 0);
+
+select tst.ok((select count(*) from public.onboarding_tasks where employee_id = (select id from public.employees where full_name='Alice Staff')) >= 6, 'onboarding tasks were created for a new employee');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.works($$insert into public.employee_compensation(employee_id, basic_salary, allowances) select id, 50000, 5000 from public.employees where full_name='Alice Staff'$$, 'payroll officer can record compensation');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.employee_compensation$$, 0, 'HR officer cannot see pay');
+select tst.fails($$insert into public.employee_compensation(employee_id, basic_salary) select id, 1 from public.employees where full_name='Carol Peer'$$, 'HR officer cannot record pay');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.employee_compensation$$, 0, 'an employee cannot read pay records, even their own');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$insert into public.leave_requests(employee_id, leave_type_id, start_date, end_date, reason) select e.id, t.id, (select mon from tst_dates), (select mon+2 from tst_dates), 'Family' from public.employees e, public.leave_types t where e.full_name='Alice Staff' and t.name='Annual test leave'$$, 'an employee can request leave for themselves');
+select tst.fails($$insert into public.leave_requests(employee_id, leave_type_id, start_date, end_date) select e.id, t.id, (select mon+1 from tst_dates), (select mon+3 from tst_dates) from public.employees e, public.leave_types t where e.full_name='Alice Staff' and t.name='Annual test leave'$$, 'overlapping leave is refused');
+select tst.fails($$insert into public.leave_requests(employee_id, leave_type_id, start_date, end_date) select e.id, t.id, (select mon+7 from tst_dates), (select mon+30 from tst_dates) from public.employees e, public.leave_types t where e.full_name='Alice Staff' and t.name='Annual test leave'$$, 'leave over the yearly allowance is refused');
+select tst.fails($$insert into public.leave_requests(employee_id, leave_type_id, start_date, end_date) select e.id, t.id, (select mon+5 from tst_dates), (select mon+6 from tst_dates) from public.employees e, public.leave_types t where e.full_name='Alice Staff' and t.name='Annual test leave'$$, 'a weekend-only request is refused');
+select tst.fails($$insert into public.leave_requests(employee_id, leave_type_id, start_date, end_date) select '00000000-0000-0000-0000-000000000000'::uuid, t.id, (select mon+14 from tst_dates), (select mon+15 from tst_dates) from public.leave_types t where t.name='Annual test leave'$$, 'an employee cannot request leave for someone else');
+select tst.fails($$update public.leave_requests set status = 'approved'$$, 'an employee cannot approve their own leave (no update right)');
+select tst.admin();
+select tst.ok((select days from public.leave_requests limit 1) = 3, 'working days are counted (Mon to Wed = 3)');
+select tst.ok((select status from public.leave_requests limit 1) = 'pending', 'leave starts as pending');
+select tst.ok(exists(select 1 from public.approval_requests where subject='leave' and status='pending'), 'an approval request was opened for the leave');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.fails($$select public.decide_approval((select id from public.approval_requests where subject='leave' and status='pending' limit 1), 'approved', null)$$, 'the employee cannot approve their own leave request');
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.count_is($$select count(*) from public.leave_requests$$, 0, 'a peer cannot see someone else''s leave');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.count_is($$select count(*) from public.leave_requests$$, 1, 'the line manager sees their report''s leave');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='leave' and status='pending' limit 1), 'approved', null)) = 'approved', 'the line manager approves');
+select tst.admin();
+select tst.ok((select status from public.leave_requests limit 1) = 'approved', 'approval updates the leave request');
+select tst.ok((select taken from public.leave_balances b join public.leave_types t on t.id=b.leave_type_id where t.name='Annual test leave' and b.employee_id=(select id from public.employees where full_name='Alice Staff')) = 3 or (select extract(year from mon) from tst_dates) <> extract(year from now()), 'leave balance shows days taken');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$select public.cancel_leave_request((select id from public.leave_requests limit 1))$$, 'a future approved leave can be cancelled by the employee');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$select public.clock_in()$$, 'an employee can check in');
+select tst.fails($$select public.clock_in()$$, 'checking in twice is refused');
+select tst.works($$select public.clock_out()$$, 'an employee can check out');
+select tst.fails($$insert into public.attendance_records(employee_id, work_date) select id, current_date - 1 from public.employees where full_name='Alice Staff'$$, 'an employee cannot write attendance records directly');
+select tst.as_user('b0000000-0000-0000-0000-00000000000b');
+select tst.fails($$select public.clock_in()$$, 'a user with no employee record cannot check in');
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.works($$select public.clock_in()$$, 'Carol (self-service) can check in too');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$insert into public.attendance_records(employee_id, work_date, status) select id, current_date - 3, 'absent' from public.employees where full_name='Carol Peer'$$, 'HR can record attendance for anyone');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$insert into public.employment_contracts(employee_id, contract_type, start_date, end_date) select id, 'fixed_term', current_date - 300, current_date + 20 from public.employees where full_name='Carol Peer'$$, 'HR can add a contract');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.employment_contracts$$, 0, 'staff cannot read contracts');
+select tst.admin();
+select tst.ok(public.auto_hr_contract_expiry('{"days_1":60,"days_2":30,"days_3":7,"probation_days":14}') >= 1, 'contract expiry reminder is sent');
+select tst.ok(public.auto_hr_contract_expiry('{"days_1":60,"days_2":30,"days_3":7,"probation_days":14}') = 0, 'the same reminder is not sent twice');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$insert into public.job_openings(title, status) values ('Test Driver', 'open')$$, 'HR can open a vacancy');
+select tst.works($$insert into public.job_applicants(opening_id, full_name, email) select id, 'Dan Applicant', 'dan@example.test' from public.job_openings$$, 'HR can log an applicant');
+select tst.fails($$select public.hire_applicant((select id from public.job_applicants limit 1), current_date)$$, 'an applicant cannot be hired without recorded consent');
+select tst.works($$update public.job_applicants set consent_recorded = true, consent_date = current_date$$, 'consent can be recorded');
+select tst.works($$select public.hire_applicant((select id from public.job_applicants limit 1), current_date)$$, 'a consenting applicant becomes an employee');
+select tst.fails($$select public.hire_applicant((select id from public.job_applicants limit 1), current_date)$$, 'the same applicant cannot be hired twice');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.job_applicants$$, 0, 'staff cannot see applicants');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.fails($$insert into public.performance_reviews(employee_id, period_label) select id, '2027 H1' from public.employees where full_name='Alice Staff'$$, 'HR officer without reviews permission cannot write reviews');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.works($$insert into public.performance_reviews(employee_id, period_label, rating) select id, '2027 H1', 4 from public.employees where full_name='Alice Staff'$$, 'a line manager can review their report');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.performance_reviews$$, 0, 'the employee cannot see a draft review');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.works($$update public.performance_reviews set status = 'submitted'$$, 'the reviewer submits it');
+select tst.fails($$update public.performance_reviews set rating = 1$$, 'a submitted review cannot be edited');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.performance_reviews$$, 1, 'the employee sees a submitted review');
+select tst.works($$select public.acknowledge_review((select id from public.performance_reviews limit 1))$$, 'the employee acknowledges it');
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.count_is($$select count(*) from public.performance_reviews$$, 0, 'payroll officer cannot read reviews');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.works($$insert into public.payroll_runs(reference, period_start, period_end) values ('', '2026-11-01', '2026-11-30')$$, 'payroll officer starts a run');
+select tst.ok((select reference from public.payroll_runs) = 'PAY-2026-11', 'run reference is generated');
+select tst.ok(public.payroll_generate_lines((select id from public.payroll_runs)) = 1, 'lines are filled from recorded compensation');
+select tst.ok((select gross_pay from public.payroll_lines) = 55000, 'gross is basic plus allowances');
+select tst.ok((select deductions from public.payroll_lines) = 0, 'no statutory deduction is calculated for you');
+select tst.works($$update public.payroll_lines set deductions = 5000$$, 'a person enters deductions');
+select tst.ok((select net_pay from public.payroll_lines) = 50000, 'net = gross - deductions');
+select tst.fails($$update public.payroll_runs set status = 'approved'$$, 'a run cannot be marked approved directly');
+select tst.fails($$update public.payroll_runs set status = 'paid_recorded'$$, 'a run cannot be marked paid directly');
+select tst.fails($$select public.record_payroll_paid((select id from public.payroll_runs), 'REF123', current_date)$$, 'a draft run cannot be recorded as paid');
+select tst.works($$select public.submit_payroll_run((select id from public.payroll_runs))$$, 'the run is submitted for approval');
+select tst.fails($$update public.payroll_lines set gross_pay = 999999$$, 'lines are frozen once submitted');
+select tst.fails($$select public.decide_approval((select id from public.approval_requests where subject='payroll' and status='pending'), 'approved', null)$$, 'the preparer cannot approve their own payroll');
+select tst.as_user('b0000000-0000-0000-0000-00000000000a');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='payroll' and status='pending'), 'approved', null)) = 'next_step', 'HR head approves step one');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.fails($$select public.record_payroll_paid((select id from public.payroll_runs), 'REF123', current_date)$$, 'not yet approved: Finance cannot record it as paid');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='payroll' and status='pending'), 'approved', null)) = 'approved', 'Finance approves step two');
+select tst.admin();
+select tst.ok((select status from public.payroll_runs) = 'approved', 'run becomes approved only after both approvals');
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.fails($$select public.record_payroll_paid((select id from public.payroll_runs), 'REF123', current_date)$$, 'the preparer cannot record the payment');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.fails($$select public.record_payroll_paid((select id from public.payroll_runs), '', current_date)$$, 'a payment reference is required');
+select tst.works($$select public.record_payroll_paid((select id from public.payroll_runs), 'BANK-REF-123', current_date)$$, 'an authorised person records the external payment');
+select tst.admin();
+select tst.ok((select status from public.payroll_runs) = 'paid_recorded', 'run is now paid_recorded');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.payroll_runs$$, 0, 'HR officer cannot see payroll');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.payroll_lines$$, 0, 'staff cannot see payroll lines');
+
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.works($$insert into public.payroll_runs(reference, period_start, period_end) values ('', '2026-12-01', '2026-12-31')$$, 'second run');
+select tst.works($$select public.payroll_generate_lines((select id from public.payroll_runs where period_start='2026-12-01'))$$, 'fill second run');
+select tst.works($$select public.submit_payroll_run((select id from public.payroll_runs where period_start='2026-12-01'))$$, 'submit second run');
+select tst.as_user('b0000000-0000-0000-0000-00000000000a');
+select tst.ok((select public.decide_approval((select id from public.approval_requests where subject='payroll' and status='pending'), 'rejected', 'Numbers look wrong')) = 'rejected', 'HR head rejects');
+select tst.admin();
+select tst.ok((select status from public.payroll_runs where period_start='2026-12-01') = 'draft', 'a rejected run returns to draft for correction');
+
+update public.modules set enabled = false where key = 'people';
+select tst.as_user('b0000000-0000-0000-0000-000000000003');
+select tst.count_is($$select count(*) from public.payroll_runs$$, 0, 'with the module switched off, payroll cannot be read');
+select tst.admin();
+update public.modules set enabled = true where key = 'people';
+
+-- ---------------- report ----------------
+select tst.admin();
+select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;
+select count(*) filter (where passed) as passed, count(*) filter (where not passed) as failed from tst.results;
+do $$ begin
+  if exists (select 1 from tst.results where not passed) then raise exception 'PEOPLE/FINANCE TESTS FAILED'; end if;
+end $$;

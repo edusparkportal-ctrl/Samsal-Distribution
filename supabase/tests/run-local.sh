@@ -10,5 +10,8 @@ reset() { $P -f supabase/tests/stubs.sql >/dev/null 2>&1; for f in supabase/migr
 echo "== migrations + RLS suite"; reset
 RLS_OUT=$($P -f supabase/tests/rls.test.sql 2>&1) || { echo "$RLS_OUT" | grep -E "ERROR|FAIL|RLS TESTS" ; echo "RLS SUITE FAILED"; exit 1; }
 echo "$RLS_OUT" | grep -E "^ *[0-9]+ *\| *[0-9]+ *$|passed|FAIL" || true
+echo "== migrations + HR/Finance/approvals suite"; reset
+PF_OUT=$($P -f supabase/tests/people_finance.test.sql 2>&1) || { echo "$PF_OUT" | grep -E "ERROR|FAIL|TESTS FAILED"; echo "PEOPLE/FINANCE SUITE FAILED"; exit 1; }
+echo "$PF_OUT" | grep -E "^ *[0-9]+ *\| *[0-9]+ *$|passed|FAIL" || true
 echo "== migrations + seed (twice) + seed tests"; reset; $P -f supabase/seed.sql; $P -f supabase/seed.sql; $P -f supabase/tests/seed.test.sql
 echo "ALL DATABASE TESTS PASSED"
