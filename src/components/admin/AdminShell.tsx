@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Globe, Building2, Users, Share2, Home, Package, Tag, Wrench, Factory, Image as ImageIcon, Search, Megaphone, File as FileIcon,
   Inbox, Contact, FileText, Truck, ClipboardList, Warehouse, ArrowLeftRight, ShoppingCart, Gavel, BarChart3, ShieldCheck, Settings, KeyRound,
-  Layers, Zap, Bell, LogOut, Menu, X, UserCircle, ExternalLink, type LucideIcon,
+  Layers, Zap, Wallet, UserPlus, ClipboardCheck, Bell, LogOut, Menu, X, UserCircle, ExternalLink, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { signOut } from "@/app/admin/login/actions";
@@ -16,7 +16,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   globe: Globe, building: Building2, users: Users, share: Share2, home: Home, package: Package, tag: Tag, wrench: Wrench, factory: Factory,
   image: ImageIcon, search: Search, megaphone: Megaphone, file: FileIcon, inbox: Inbox, contact: Contact, filetext: FileText, truck: Truck,
   clipboard: ClipboardList, warehouse: Warehouse, arrows: ArrowLeftRight, cart: ShoppingCart, gavel: Gavel, chart: BarChart3, shield: ShieldCheck,
-  settings: Settings, key: KeyRound, layers: Layers, zap: Zap,
+  settings: Settings, key: KeyRound, layers: Layers, zap: Zap, wallet: Wallet, userplus: UserPlus, clipboardcheck: ClipboardCheck,
 };
 
 export type ShellNav = {
@@ -24,7 +24,7 @@ export type ShellNav = {
   settings: { label: string; href: string }[];
 };
 
-export function AdminShell({ nav, user, unread = 0, children }: { nav: ShellNav; user: { name: string; role: string }; unread?: number; children: React.ReactNode }) {
+export function AdminShell({ nav, user, unread = 0, approvals = 0, children }: { nav: ShellNav; user: { name: string; role: string }; unread?: number; approvals?: number; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
@@ -92,6 +92,10 @@ export function AdminShell({ nav, user, unread = 0, children }: { nav: ShellNav;
             <ExternalLink aria-hidden="true" size={14} /> View website
           </Link>
           <div className="ml-auto flex items-center gap-3">
+            <Link href="/admin/approvals" className="relative rounded p-2 text-navy hover:bg-grey" aria-label={approvals > 0 ? `Approvals, ${approvals} waiting for you` : "Approvals"}>
+              <ClipboardCheck aria-hidden="true" size={20} />
+              {approvals > 0 && <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold leading-none text-white">{approvals > 99 ? "99+" : approvals}</span>}
+            </Link>
             <Link href="/admin/notifications" className="relative rounded p-2 text-navy hover:bg-grey" aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}>
               <Bell aria-hidden="true" size={20} />
               {unread > 0 && <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber px-1 text-[10px] font-bold leading-none text-navy">{unread > 99 ? "99+" : unread}</span>}

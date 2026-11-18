@@ -17,11 +17,11 @@ import type { Permission } from "@/lib/auth/permissions";
 
 export type ModuleKey =
   | "website" | "crm" | "quotations" | "suppliers" | "procurement"
-  | "inventory" | "orders" | "tenders" | "hr" | "automation" | "reports" | "audit";
+  | "inventory" | "orders" | "tenders" | "hr" | "people" | "finance" | "approvals" | "automation" | "reports" | "audit";
 
 export type NavIcon =
   | "globe" | "building" | "users" | "share" | "home" | "package" | "tag" | "wrench" | "factory" | "image" | "search" | "megaphone" | "file"
-  | "inbox" | "contact" | "filetext" | "truck" | "clipboard" | "warehouse" | "arrows" | "cart" | "gavel" | "chart" | "shield" | "settings" | "key" | "layers" | "zap";
+  | "inbox" | "contact" | "filetext" | "truck" | "clipboard" | "warehouse" | "arrows" | "cart" | "gavel" | "chart" | "shield" | "settings" | "key" | "layers" | "zap" | "wallet" | "userplus" | "clipboardcheck";
 
 export type AdminNavItem = { label: string; href: string; permission: Permission };
 export type AdminModuleDef = {
@@ -112,6 +112,37 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
       { label: "Staffing requests", href: "/admin/hr/requisitions", permission: "hr.view" },
       { label: "Candidates", href: "/admin/hr/candidates", permission: "hr.view" },
       { label: "Placements", href: "/admin/hr/placements", permission: "hr.view" },
+    ],
+  },
+  {
+    key: "people",
+    label: "Human Resources",
+    icon: "userplus",
+    items: [
+      { label: "My HR", href: "/admin/people/me", permission: "people.self" },
+      { label: "Employees", href: "/admin/people/employees", permission: "people.view" },
+      { label: "Departments", href: "/admin/people/departments", permission: "people.view" },
+      { label: "Contracts", href: "/admin/people/contracts", permission: "people.view" },
+      { label: "Leave", href: "/admin/people/leave", permission: "people.view" },
+      { label: "Leave types", href: "/admin/people/leave-types", permission: "people.view" },
+      { label: "Attendance", href: "/admin/people/attendance", permission: "people.view" },
+      { label: "Onboarding", href: "/admin/people/onboarding", permission: "people.view" },
+      { label: "Onboarding template", href: "/admin/people/onboarding-template", permission: "people.manage" },
+      { label: "Vacancies", href: "/admin/people/vacancies", permission: "people.view" },
+      { label: "Applicants", href: "/admin/people/applicants", permission: "people.view" },
+      { label: "Performance reviews", href: "/admin/people/reviews", permission: "people.reviews" },
+      { label: "Salary records", href: "/admin/people/compensation", permission: "people.compensation" },
+      { label: "Payroll", href: "/admin/people/payroll", permission: "people.payroll_prepare" },
+    ],
+  },
+  {
+    key: "approvals",
+    label: "Approvals",
+    icon: "clipboardcheck",
+    items: [
+      { label: "Approval rules", href: "/admin/approvals/policies", permission: "approvals.manage" },
+      { label: "Approval steps", href: "/admin/approvals/steps", permission: "approvals.manage" },
+      { label: "All requests", href: "/admin/approvals/all", permission: "approvals.view_all" },
     ],
   },
   {
