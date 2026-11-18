@@ -136,6 +136,21 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     ],
   },
   {
+    key: "finance",
+    label: "Finance",
+    icon: "wallet",
+    items: [
+      { label: "Overview", href: "/admin/finance", permission: "finance.view" },
+      { label: "Invoices", href: "/admin/finance/invoices", permission: "finance.view" },
+      { label: "Supplier bills", href: "/admin/finance/bills", permission: "finance.view" },
+      { label: "Expense claims", href: "/admin/finance/claims", permission: "finance.claims" },
+      { label: "Ledger", href: "/admin/finance/ledger", permission: "finance.view" },
+      { label: "Budgets", href: "/admin/finance/budgets", permission: "finance.view" },
+      { label: "Reports", href: "/admin/finance/reports", permission: "finance.reports" },
+      { label: "Categories", href: "/admin/finance/categories", permission: "finance.manage" },
+    ],
+  },
+  {
     key: "approvals",
     label: "Approvals",
     icon: "clipboardcheck",

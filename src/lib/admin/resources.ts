@@ -14,6 +14,7 @@ import type { ModuleKey } from "@/lib/modules";
 import { CATEGORY_ICONS, SERVICE_ICONS } from "@/lib/content/types";
 import { OPS_RESOURCES } from "./resources-ops";
 import { PEOPLE_RESOURCES } from "./resources-people";
+import { FINANCE_RESOURCES } from "./resources-finance";
 
 type Base = { name: string; label: string; col?: string; required?: boolean; help?: string; section?: string };
 export type Field =
@@ -287,7 +288,7 @@ const WEBSITE: Record<string, ResourceDef> = {
   },
 };
 
-export const RESOURCES: Record<string, ResourceDef> = { ...WEBSITE, ...OPS_RESOURCES, ...PEOPLE_RESOURCES };
+export const RESOURCES: Record<string, ResourceDef> = { ...WEBSITE, ...OPS_RESOURCES, ...PEOPLE_RESOURCES, ...FINANCE_RESOURCES };
 /** The /admin/website/[resource] pages serve only the website resources. */
 export const RESOURCE_BY_ROUTE: Record<string, ResourceDef> = Object.fromEntries(Object.values(WEBSITE).map((r) => [r.route, r]));
 export const resourceBase = (d: ResourceDef) => `${d.base ?? "/admin/website"}/${d.route}`;
