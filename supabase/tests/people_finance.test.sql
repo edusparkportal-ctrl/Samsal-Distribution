@@ -312,6 +312,7 @@ update public.modules set enabled = true where key = 'people';
 -- ================= FINANCE (stage 3) =================
 select tst.admin();
 insert into public.role_permissions select r.id, 'finance.claims' from public.roles r where r.key = 'staff_basic' on conflict do nothing;
+update public.automation_rules set enabled = false where key in ('finance_invoice_drafts', 'finance_bill_drafts');
 insert into public.customers (company_name, contact_name, email) values ('Test Customer Ltd', 'Cathy Customer', 'cathy@example.test');
 insert into public.suppliers (name) values ('Test Supplier Ltd');
 insert into public.sales_orders (customer_id, status) select id, 'delivered' from public.customers where company_name = 'Test Customer Ltd';
@@ -457,6 +458,52 @@ select tst.as_user('b0000000-0000-0000-0000-000000000005');
 select tst.count_is($$select count(*) from public.finance_transactions$$, 0, 'with the module switched off, the ledger cannot be read');
 select tst.admin();
 update public.modules set enabled = true where key = 'finance';
+
+
+-- ================= FINANCE AUTOMATIONS (stage 4) =================
+select tst.admin();
+select tst.ok((select count(*) from public.automation_rules where key like 'finance_%' or key = 'approval_reminders') = 8, 'the finance and approval automations are registered in the control centre');
+select tst.ok(not exists(select 1 from public.automation_rules where key like 'finance_%' and notify_email and not email_capable), 'no finance rule can email unless it is email capable');
+
+-- delivered order -> draft invoice (never an issued one)
+update public.automation_rules set enabled = true where key in ('finance_invoice_drafts', 'finance_bill_drafts');
+insert into public.sales_orders (customer_id, status) select id, 'confirmed' from public.customers where company_name = 'Test Customer Ltd';
+insert into public.sales_order_items (order_id, line_no, description, quantity, unit_price) select id, 1, 'Auto goods', 2, 500 from public.sales_orders where status = 'confirmed';
+update public.sales_orders set status = 'delivered' where status = 'confirmed';
+select tst.ok((select count(*) from public.invoices where notes like 'Created from sales order%' and status = 'draft') >= 2, 'a delivered order produced a DRAFT invoice automatically');
+select tst.ok(not exists(select 1 from public.invoices i join public.sales_orders o on o.id = i.sales_order_id where i.status = 'issued' and i.issued_by is null), 'automation never issues an invoice');
+select tst.ok(exists(select 1 from public.notifications where dedupe_key like 'inv-draft:%'), 'the finance team is told about the draft invoice');
+update public.sales_orders set status = 'invoiced' where status = 'delivered';
+update public.sales_orders set status = 'delivered' where status = 'invoiced';
+select tst.ok((select count(*) from public.invoices where sales_order_id is not null and status <> 'void') = (select count(distinct sales_order_id) from public.invoices where sales_order_id is not null and status <> 'void'), 'no duplicate invoice per order');
+
+-- received PO -> draft bill
+insert into public.purchase_orders (supplier_id, status) select id, 'sent' from public.suppliers where name = 'Test Supplier Ltd';
+insert into public.purchase_order_items (po_id, line_no, description, quantity, unit_price, received_quantity) select id, 1, 'Auto supplies', 10, 100, 10 from public.purchase_orders where status = 'sent';
+update public.purchase_orders set status = 'received' where status = 'sent';
+select tst.ok(exists(select 1 from public.supplier_bills where description like 'Draft from purchase order%' and status = 'draft' and amount = 1000), 'a received order produced a DRAFT bill for the value received');
+select tst.ok(not exists(select 1 from public.supplier_bills where purchase_order_id is not null and status in ('approved', 'paid', 'partially_paid') and description like 'Draft from%' and created_by is null and not exists (select 1 from public.approval_requests r where r.subject = 'bill' and r.record_id = supplier_bills.id and r.status = 'approved')), 'automation never approves or pays a bill');
+
+-- overdue reminders: internal notice always; customer email only when both switches are on
+update public.invoices set due_date = current_date - 10, issue_date = current_date - 40, status = 'issued', issued_by = 'b0000000-0000-0000-0000-000000000005', issued_at = now() where notes like 'Created from sales order%' and status = 'draft' and id = (select id from public.invoices where notes like 'Created from sales order%' and status = 'draft' limit 1);
+select tst.ok(public.auto_finance_payment_reminders('{"first_after_days":1,"repeat_every_days":7,"max_reminders":3}') >= 1, 'an overdue invoice produces an internal reminder');
+select tst.ok((select count(*) from public.notification_outbox where rule_key = 'finance_payment_reminders') = 0, 'no customer email is queued while the email switches are off');
+select tst.ok(public.auto_finance_payment_reminders('{"first_after_days":1,"repeat_every_days":7,"max_reminders":3}') = 0, 'the same invoice is not reminded again the same day');
+update public.automation_settings set email_enabled = true;
+update public.automation_rules set notify_email = true where key = 'finance_payment_reminders';
+delete from public.invoice_reminders;
+select tst.ok(public.auto_finance_payment_reminders('{"first_after_days":1,"repeat_every_days":7,"max_reminders":3}') >= 0, 'reminders run again with email on');
+select tst.ok((select count(*) from public.notification_outbox where rule_key = 'finance_payment_reminders' and to_email = 'cathy@example.test') = 1, 'one customer reminder is queued once both switches are on');
+update public.automation_settings set email_enabled = false;
+update public.automation_rules set notify_email = false where key = 'finance_payment_reminders';
+
+-- bills due, budgets, monthly report, approval reminders
+select tst.ok(public.auto_finance_budget_alerts('{}') >= 0, 'budget alert job runs');
+select tst.ok(public.auto_finance_monthly_report('{}') >= 0, 'monthly report job runs');
+select tst.ok(public.auto_finance_monthly_report('{}') = 0, 'and does not rebuild a month that already has a report');
+update public.approval_requests set created_at = now() - interval '5 days' where status = 'pending';
+select tst.ok(public.auto_approval_reminders('{"stale_days":2}') >= 0, 'approval reminders run');
+select tst.ok(public.auto_approval_reminders('{"stale_days":2}') = 0, 'and are not repeated in the same week');
 
 -- ---------------- report ----------------
 select tst.admin();
