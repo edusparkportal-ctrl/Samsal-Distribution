@@ -12,6 +12,10 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const nav = buildNav({ has: ctx.has, moduleEnabled: ctx.moduleEnabled });
   const shellNav = {
     modules: nav.modules.map((m) => ({ key: m.key, label: m.label, icon: m.icon, items: m.items.map((i) => ({ label: i.label, href: i.href })) })),
+    departments: nav.departments.map((d) => ({
+      key: d.key, label: d.label, icon: d.icon,
+      modules: d.modules.map((m) => ({ key: m.key, label: m.label, items: m.items.map((i) => ({ label: i.label, href: i.href })) })),
+    })),
     settings: nav.settings.map((i) => ({ label: i.label, href: i.href })),
   };
   // Unread count for the bell. RLS limits this to the signed-in person's own notifications; a failure just shows no badge.

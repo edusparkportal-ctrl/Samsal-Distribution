@@ -174,6 +174,23 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
   { key: "audit", label: "Activity log", icon: "shield", items: [{ label: "Activity log", href: "/admin/audit", permission: "audit.view" }] },
 ];
 
+/**
+ * DEPARTMENTS
+ * -----------
+ * The sidebar groups modules under the department that uses them, so it stays short. This is purely
+ * presentational: permissions and module switches are unchanged. A module not listed here appears
+ * under "Other" so nothing can ever go missing from the menu.
+ */
+export type DepartmentDef = { key: string; label: string; icon: NavIcon; modules: ModuleKey[] };
+export const DEPARTMENTS: DepartmentDef[] = [
+  { key: "sales", label: "Sales & Customers", icon: "inbox", modules: ["crm", "quotations", "orders"] },
+  { key: "supply", label: "Procurement & Supply", icon: "truck", modules: ["suppliers", "procurement", "inventory", "tenders"] },
+  { key: "people", label: "Human Resources", icon: "userplus", modules: ["people", "hr"] },
+  { key: "finance", label: "Finance", icon: "wallet", modules: ["finance"] },
+  { key: "marketing", label: "Website & Marketing", icon: "globe", modules: ["website"] },
+  { key: "management", label: "Management", icon: "shield", modules: ["approvals", "automation", "reports", "audit"] },
+];
+
 /** Settings pages are not modules (always present) but are permission-gated the same way. */
 export const SETTINGS_ITEMS: AdminNavItem[] = [
   { label: "Users", href: "/admin/settings/users", permission: "users.manage" },
@@ -195,5 +212,13 @@ export function buildNav(opts: {
     .map((m) => ({ ...m, items: m.items.filter((i) => opts.has(i.permission)) }))
     .filter((m) => m.items.length > 0);
   const settings = SETTINGS_ITEMS.filter((i) => opts.has(i.permission));
-  return { modules, settings };
+  const placed = new Set(DEPARTMENTS.flatMap((d) => d.modules));
+  const groups: (DepartmentDef & { modules: typeof modules })[] = DEPARTMENTS.map((d) => ({
+    ...d,
+    modules: d.modules.map((k) => modules.find((m) => m.key === k)).filter((m): m is (typeof modules)[number] => !!m),
+  }));
+  const rest = modules.filter((m) => !placed.has(m.key));
+  if (rest.length) groups.push({ key: "other", label: "Other", icon: "layers", modules: rest });
+  const departments = groups.filter((d) => d.modules.length > 0);
+  return { modules, departments, settings };
 }

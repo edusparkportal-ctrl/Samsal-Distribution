@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Globe, Building2, Users, Share2, Home, Package, Tag, Wrench, Factory, Image as ImageIcon, Search, Megaphone, File as FileIcon,
   Inbox, Contact, FileText, Truck, ClipboardList, Warehouse, ArrowLeftRight, ShoppingCart, Gavel, BarChart3, ShieldCheck, Settings, KeyRound,
-  Layers, Zap, Wallet, UserPlus, ClipboardCheck, Bell, LogOut, Menu, X, UserCircle, ExternalLink, type LucideIcon,
+  Layers, Zap, Wallet, UserPlus, ClipboardCheck, Bell, LogOut, Menu, X, ChevronDown, UserCircle, ExternalLink, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { signOut } from "@/app/admin/login/actions";
@@ -21,12 +21,14 @@ const ICONS: Record<NavIcon, LucideIcon> = {
 
 export type ShellNav = {
   modules: { key: string; label: string; icon: NavIcon; items: { label: string; href: string }[] }[];
+  departments: { key: string; label: string; icon: NavIcon; modules: { key: string; label: string; items: { label: string; href: string }[] }[] }[];
   settings: { label: string; href: string }[];
 };
 
 export function AdminShell({ nav, user, unread = 0, approvals = 0, children }: { nav: ShellNav; user: { name: string; role: string }; unread?: number; approvals?: number; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [openDeps, setOpenDeps] = useState<string[]>([]);
   useEffect(() => setOpen(false), [pathname]);
 
   const link = (href: string, label: string, Icon?: LucideIcon) => {
@@ -47,16 +49,44 @@ export function AdminShell({ nav, user, unread = 0, approvals = 0, children }: {
   const sidebar = (
     <nav aria-label="Admin" className="flex h-full flex-col overflow-y-auto px-3 py-4">
       <div className="px-3 pb-4"><Logo onDark /></div>
-      <div className="space-y-5">
+      <div className="space-y-1.5">
         <div>{link("/admin", "Dashboard", LayoutDashboard)}</div>
-        {nav.modules.map((m) => {
-          const Icon = ICONS[m.icon] ?? Layers;
-          // Modules with a single item render as one link; others as a labelled group.
-          if (m.items.length === 1) return <div key={m.key}>{link(m.items[0].href, m.label, Icon)}</div>;
+        {nav.departments.map((d) => {
+          const Icon = ICONS[d.icon] ?? Layers;
+          const hrefs = d.modules.flatMap((m) => m.items.map((i) => i.href));
+          const hasActive = hrefs.some((h) => pathname === h || pathname.startsWith(h + "/"));
+          const isOpen = hasActive || openDeps.includes(d.key);
+          const single = d.modules.length === 1;
           return (
-            <div key={m.key}>
-              <p className="mb-1 flex items-center gap-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-teal-light"><Icon aria-hidden="true" size={14} />{m.label}</p>
-              <div className="space-y-0.5">{m.items.map((i) => link(i.href, i.label))}</div>
+            <div key={d.key}>
+              <button
+                type="button"
+                onClick={() => setOpenDeps((cur) => (cur.includes(d.key) ? cur.filter((k) => k !== d.key) : [...cur, d.key]))}
+                aria-expanded={isOpen}
+                aria-controls={`dep-${d.key}`}
+                className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-semibold transition-colors ${hasActive ? "text-white" : "text-white/85 hover:bg-white/10 hover:text-white"}`}
+              >
+                <Icon aria-hidden="true" size={17} />
+                <span className="flex-1">{d.label}</span>
+                <ChevronDown aria-hidden="true" size={15} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+              {isOpen && (
+                <div id={`dep-${d.key}`} className="ml-3 mt-0.5 space-y-2 border-l border-white/15 pl-2">
+                  {d.modules.map((m) => (
+                    <div key={m.key} className="space-y-0.5">
+                      {/* A module with one item is just a link; several items get a small heading (skipped when it repeats the department name). */}
+                      {m.items.length === 1
+                        ? link(m.items[0].href, m.label)
+                        : (
+                          <>
+                            {!single && <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-teal-light">{m.label}</p>}
+                            {m.items.map((i) => link(i.href, i.label))}
+                          </>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
