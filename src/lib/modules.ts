@@ -213,7 +213,7 @@ export function buildNav(opts: {
     .filter((m) => m.items.length > 0);
   const settings = SETTINGS_ITEMS.filter((i) => opts.has(i.permission));
   const placed = new Set(DEPARTMENTS.flatMap((d) => d.modules));
-  const groups: (DepartmentDef & { modules: typeof modules })[] = DEPARTMENTS.map((d) => ({
+  const groups: (Omit<DepartmentDef, "modules"> & { modules: typeof modules })[] = DEPARTMENTS.map((d) => ({
     ...d,
     modules: d.modules.map((k) => modules.find((m) => m.key === k)).filter((m): m is (typeof modules)[number] => !!m),
   }));
