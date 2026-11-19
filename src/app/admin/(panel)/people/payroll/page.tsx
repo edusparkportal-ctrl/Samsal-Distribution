@@ -67,6 +67,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                 {draft && prepare && <form action={generateLines}><input type="hidden" name="id" value={current.id} /><button className="btn-primary px-4 py-2 text-sm">Fill from salary records</button></form>}
               </div>
             ) : (
+              <>
               <form action={saveLines}>
                 <input type="hidden" name="id" value={current.id} />
                 <div className="overflow-x-auto">
@@ -91,6 +92,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
               {draft && prepare && ((lines ?? []) as Line[]).map((l) => (
                 <form key={l.id} id={`rm_${l.id}`} action={removeLine}><input type="hidden" name="id" value={current.id} /><input type="hidden" name="line" value={l.id} /></form>
               ))}
+              </>
             )}
           </Panel>
 
