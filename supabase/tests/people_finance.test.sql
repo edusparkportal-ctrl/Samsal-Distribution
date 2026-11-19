@@ -505,6 +505,51 @@ update public.approval_requests set created_at = now() - interval '5 days' where
 select tst.ok(public.auto_approval_reminders('{"stale_days":2}') >= 0, 'approval reminders run');
 select tst.ok(public.auto_approval_reminders('{"stale_days":2}') = 0, 'and are not repeated in the same week');
 
+
+-- ================= RESTRICTED DOCUMENTS (stage 5) =================
+select tst.admin();
+create table doc_ids as select (select id from public.employees where full_name = 'Alice Staff') as emp, (select id from public.expense_claims where amount = 2000) as claim, (select id from public.invoices limit 1) as inv;
+grant all on doc_ids to public;
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$insert into storage.objects(bucket_id, name, owner) values ('restricted-docs', 'employee/202611/11111111-1111-1111-1111-111111111111-contract.pdf', 'b0000000-0000-0000-0000-000000000002')$$, 'HR officer can upload an employee document');
+select tst.fails($$insert into storage.objects(bucket_id, name) values ('restricted-docs', 'invoice/202611/11111111-1111-1111-1111-111111111112-inv.pdf')$$, 'HR officer cannot upload a finance document');
+select tst.works($$insert into public.restricted_documents(entity_type, entity_id, storage_path, file_name, mime_type, size_bytes, created_by) select 'employee', emp, 'employee/202611/11111111-1111-1111-1111-111111111111-contract.pdf', 'contract.pdf', 'application/pdf', 1000, 'b0000000-0000-0000-0000-000000000002' from doc_ids$$, 'HR officer indexes it');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 1, 'HR officer sees HR documents');
+select tst.works($$select * from public.restricted_doc_open((select id from public.restricted_documents))$$, 'HR officer can open it (and it is logged)');
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 0, 'finance staff cannot see HR documents');
+select tst.count_is($$select count(*) from storage.objects where bucket_id = 'restricted-docs'$$, 0, 'finance staff cannot read HR files in storage');
+select tst.fails($$select * from public.restricted_doc_open((select id from public.restricted_documents limit 1))$$, 'finance staff cannot open an HR document');
+select tst.as_user('b0000000-0000-0000-0000-000000000008');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 0, 'a line manager cannot see HR documents');
+select tst.as_user('b0000000-0000-0000-0000-000000000009');
+select tst.count_is($$select count(*) from storage.objects where bucket_id = 'restricted-docs'$$, 0, 'unrelated staff cannot read restricted storage');
+select tst.admin();
+select tst.count_is($$select count(*) from public.document_access_log$$, 1, 'the open was logged');
+select tst.count_is($$select count(*) from public.audit_log where table_name = 'restricted_documents'$$, 1, 'the upload is in the activity log');
+
+-- finance documents and claim receipts
+select tst.as_user('b0000000-0000-0000-0000-000000000005');
+select tst.works($$insert into storage.objects(bucket_id, name, owner) values ('restricted-docs', 'invoice/202611/11111111-1111-1111-1111-111111111113-inv.pdf', 'b0000000-0000-0000-0000-000000000005')$$, 'accountant can upload an invoice document');
+select tst.works($$insert into public.restricted_documents(entity_type, entity_id, storage_path, file_name, mime_type, size_bytes, created_by) select 'invoice', inv, 'invoice/202611/11111111-1111-1111-1111-111111111113-inv.pdf', 'inv.pdf', 'application/pdf', 500, 'b0000000-0000-0000-0000-000000000005' from doc_ids$$, 'and index it');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.works($$insert into storage.objects(bucket_id, name, owner) values ('restricted-docs', 'expense_claim/202611/11111111-1111-1111-1111-111111111114-receipt.pdf', 'b0000000-0000-0000-0000-000000000007')$$, 'a claimant can upload a receipt');
+select tst.works($$insert into public.restricted_documents(entity_type, entity_id, storage_path, file_name, mime_type, size_bytes, created_by) select 'expense_claim', claim, 'expense_claim/202611/11111111-1111-1111-1111-111111111114-receipt.pdf', 'receipt.pdf', 'application/pdf', 400, 'b0000000-0000-0000-0000-000000000007' from doc_ids$$, 'and attach it to their own claim');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 1, 'the claimant sees only their own receipt');
+select tst.fails($$insert into public.restricted_documents(entity_type, entity_id, storage_path, file_name, mime_type, size_bytes, created_by) select 'invoice', inv, 'invoice/202611/11111111-1111-1111-1111-111111111115-x.pdf', 'x.pdf', 'application/pdf', 400, 'b0000000-0000-0000-0000-000000000007' from doc_ids$$, 'the claimant cannot attach files to invoices');
+select tst.fails($$insert into storage.objects(bucket_id, name, owner) values ('restricted-docs', 'employee/202611/11111111-1111-1111-1111-111111111116-x.pdf', 'b0000000-0000-0000-0000-000000000007')$$, 'the claimant cannot upload HR files');
+select tst.affects($$delete from public.restricted_documents$$, 0, 'the claimant cannot remove documents');
+select tst.as_user('b0000000-0000-0000-0000-00000000000c');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 0, 'a colleague cannot see the receipt');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 2, 'finance manager sees invoice and receipt documents but no HR documents');
+select tst.admin();
+update public.modules set enabled = false where key = 'people';
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.restricted_documents$$, 0, 'with the HR module off, HR documents are closed');
+select tst.admin();
+update public.modules set enabled = true where key = 'people';
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;

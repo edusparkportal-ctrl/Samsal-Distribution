@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 import type { ResourceDef } from "./resources";
 
 const opt = (values: string[]) => values.map((v) => ({ value: v, label: v.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) }));
-const EMP = { table: "employees", labelCol: "full_name", orderBy: "full_name", filter: ["deleted_at", null] } as const;
+const EMP: { table: string; labelCol: string; orderBy: string; filter: [string, unknown] } = { table: "employees", labelCol: "full_name", orderBy: "full_name", filter: ["deleted_at", null] };
 const CONTRACT_TONE = { draft: "grey", active: "green", expired: "amber", terminated: "red" } as const;
 const OPENING_TONE = { draft: "grey", open: "teal", on_hold: "amber", filled: "green", closed: "grey" } as const;
 const STAGE_TONE = { applied: "grey", screening: "amber", interview: "amber", offer: "teal", hired: "green", rejected: "red", withdrawn: "grey" } as const;
@@ -33,7 +33,7 @@ export const PEOPLE_RESOURCES: Record<string, ResourceDef> = {
   employees: {
     key: "employees", base: "/admin/people", route: "employees", table: "employees", label: "Employees", singular: "Employee", pk: "id",
     description: "Employee directory. Keep it to work details. Do not record ID numbers, tax PINs, bank details or health information here. Pay is kept separately under Salary records, for authorised staff only.",
-    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by",
+    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by", restrictedDocs: "employee",
     softDelete: "deleted_at", orderBy: "full_name", newLabel: "Add employee", filterStatus: true, statusOptions: opt(["active", "on_notice", "left"]),
     columns: [{ key: "employee_no", label: "No." }, { key: "full_name", label: "Name" }, { key: "job_title", label: "Job title" }, { key: "department_id", label: "Department", lookup: { table: "departments", labelCol: "name" } }, { key: "status", label: "Status", badge: EMP_TONE }],
     fields: [
@@ -72,7 +72,7 @@ export const PEOPLE_RESOURCES: Record<string, ResourceDef> = {
   employment_contracts: {
     key: "employment_contracts", base: "/admin/people", route: "contracts", table: "employment_contracts", label: "Contracts", singular: "Contract", pk: "id",
     description: "Contract dates and status. HR is reminded automatically before a contract or probation ends. Keep the signed document in restricted document storage (below, when editing).",
-    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by",
+    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by", restrictedDocs: "contract",
     softDelete: "deleted_at", orderBy: "end_date", newLabel: "Add contract", filterStatus: true, statusOptions: opt(["draft", "active", "expired", "terminated"]),
     columns: [{ key: "employee_id", label: "Employee", lookup: { table: "employees", labelCol: "full_name" } }, { key: "contract_type", label: "Type" }, { key: "start_date", label: "Start" }, { key: "end_date", label: "End" }, { key: "status", label: "Status", badge: CONTRACT_TONE }],
     fields: [
@@ -161,7 +161,7 @@ export const PEOPLE_RESOURCES: Record<string, ResourceDef> = {
   job_applicants: {
     key: "job_applicants", base: "/admin/people", route: "applicants", table: "job_applicants", label: "Applicants", singular: "Applicant", pk: "id",
     description: "People who applied. Keep personal data to a minimum and record their consent. Do not store ID numbers, bank details or health information. To hire someone, record consent first, then use Hire on the Applicants page.",
-    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by",
+    permission: "people.manage", viewPermission: "people.view", module: "people", publicSite: false, createdBy: "created_by", restrictedDocs: "job_applicant",
     softDelete: "deleted_at", orderBy: "created_at", newLabel: "Add applicant", filterStatus: true, statusOptions: opt(["applied", "screening", "interview", "offer", "hired", "rejected", "withdrawn"]),
     columns: [{ key: "full_name", label: "Name" }, { key: "opening_id", label: "Vacancy", lookup: { table: "job_openings", labelCol: "reference" } }, { key: "stage", label: "Stage", badge: STAGE_TONE }, { key: "consent_recorded", label: "Consent recorded" }],
     fields: [

@@ -1,4 +1,5 @@
 import { Flash } from "@/components/admin/Flash";
+import { RestrictedDocuments } from "@/components/admin/RestrictedDocuments";
 import { Badge, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -12,7 +13,7 @@ type Claim = { id: string; number: string; employee_id: string; category_id: str
 const TONE = { pending: "amber", approved: "teal", rejected: "red", cancelled: "grey", paid_recorded: "green" } as const;
 const LABEL: Record<string, string> = { pending: "Awaiting approval", approved: "Approved, not yet reimbursed", rejected: "Rejected", cancelled: "Cancelled", paid_recorded: "Reimbursed" };
 
-export default async function ClaimsPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+export default async function ClaimsPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; docs?: string }> }) {
   const sp = await searchParams;
   const ctx = await requirePermission("finance.claims", "finance");
   const sb = await createSupabaseServerClient();
@@ -34,6 +35,7 @@ export default async function ClaimsPage({ searchParams }: { searchParams: Promi
       <PageHeader title="Expense claims" description="Claim back money you spent for the business. Your claim goes to the approvers named in the approval rules; you cannot approve your own. After approval, Finance records the reimbursement. Keep your receipts: document storage for them is on the claim record." />
       <Flash ok={sp.ok} error={sp.error} />
       <div className="space-y-5">
+        {sp.docs && /^[0-9a-f-]{36}$/.test(sp.docs) && <RestrictedDocuments entityType="expense_claim" entityId={sp.docs} backPath={`/admin/finance/claims?docs=${sp.docs}`} />}
         {me ? (
           <Panel title="New claim">
             <form action={submitClaim} className="grid gap-3 text-sm sm:grid-cols-3">
@@ -56,6 +58,7 @@ export default async function ClaimsPage({ searchParams }: { searchParams: Promi
                       <p className="break-words text-charcoal">{cn.get(c.category_id)} · {c.description}</p><p className="text-xs text-grey-500">{day(c.expense_date)}{c.status === "pending" && waiting.get(c.id) ? ` · waiting for: ${waiting.get(c.id)}` : ""}</p></div>
                     <strong>{money(c.amount, c.currency)}</strong>
                   </div>
+                  <a href={`/admin/finance/claims?docs=${c.id}`} className="mt-2 inline-block text-xs font-medium text-teal-dark underline underline-offset-2">Receipts and documents</a>
                   {c.status === "pending" && c.employee_id === me && <form action={cancelClaim} className="mt-2"><input type="hidden" name="id" value={c.id} /><button className="text-xs font-medium text-red-700 underline underline-offset-2">Cancel claim</button></form>}
                   {c.status === "approved" && payer && (
                     <form action={markReimbursed} className="mt-2 grid gap-2 sm:grid-cols-[1fr_9rem_auto]"><input type="hidden" name="id" value={c.id} />

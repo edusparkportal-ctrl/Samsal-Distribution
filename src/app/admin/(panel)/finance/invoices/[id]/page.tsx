@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Flash } from "@/components/admin/Flash";
 import { PrintButton } from "@/components/admin/PrintButton";
+import { RestrictedDocuments } from "@/components/admin/RestrictedDocuments";
 import { Badge, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -133,6 +134,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
             )}
           </div>
         )}
+        <div className="print:hidden"><RestrictedDocuments entityType="invoice" entityId={id} backPath={`/admin/finance/invoices/${id}`} /></div>
         {draft && can && (
           <Panel title="Discard this draft" className="print:hidden">
             <form action={voidInvoice} className="flex flex-col gap-2 text-sm sm:flex-row sm:items-end"><input type="hidden" name="id" value={id} />

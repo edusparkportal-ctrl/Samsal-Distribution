@@ -55,3 +55,20 @@ Optional but recommended: **Settings > Environments > production > Required revi
 - No extra variables are needed for in-app notifications and reminders.
 - For emails (only after a sending domain is verified): `RESEND_API_KEY`, `AUTOMATION_FROM_EMAIL`, and `CRON_SECRET` (any random string of 16+ characters). `vercel.json` schedules `/api/automation/dispatch` daily; the route refuses requests without the secret.
 - The 5-minute scheduler is created by migration `20261116120200_automation_schedule.sql` using pg_cron. If that migration printed a notice that pg_cron is unavailable, enable the extension in Supabase (Database > Extensions) and re-run it.
+
+## Human Resources and Finance release
+
+New migrations (apply in order; the GitHub workflow does this on push to `main`):
+`20261117100000_org_and_approvals`, `20261117110000_hr_people`, `20261117120000_finance`, `20261117130000_finance_automations`, `20261117140000_restricted_docs`.
+
+- No new environment variables.
+- Both modules ship **off**. Enable `people` and `finance` in the Control Centre when ready.
+- If the migration job fails at database password authentication, reset the `SUPABASE_DB_PASSWORD` GitHub secret (Supabase → Settings → Database), then re-run the workflow.
+- Before using payroll: have an adviser confirm statutory deductions and tax rates you enter.
+- Before turning email on: verified domain, `RESEND_API_KEY`, `AUTOMATION_FROM_EMAIL`, `CRON_SECRET`.
+
+### Testing
+`supabase/tests/run-local.sh` runs the RLS suite and the people/finance/approvals suite (about 490 checks) against a local Postgres; the TypeScript suites run with the existing `test-*` scripts. Run them before merging to `main`.
+
+### Security notes
+Sensitive tables have RLS on and no anon access; every read is gated by `public.can(permission, module)`, so switching a module off hides its data even from administrators' queries. Restricted documents are served through an authenticated route with permission checks, never public URLs.

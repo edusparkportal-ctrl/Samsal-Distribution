@@ -64,6 +64,7 @@ export type ResourceDef = {
   createdBy?: string;            // column that receives the signed-in user's id on create
   createOnly?: boolean;          // append-only records (no edit, no delete)
   noDelete?: boolean;
+  restrictedDocs?: "employee" | "contract" | "job_applicant"; // attach HR documents on the edit page (restricted storage)
   documentType?: "supplier" | "supplier_quote" | "purchase_order" | "tender" | "delivery"; // attach private documents on the edit page
   statusOptions?: { value: string; label: string }[]; // list filter chips
   beforeSave?: (values: Record<string, unknown>) => void;

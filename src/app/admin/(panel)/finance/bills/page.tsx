@@ -1,4 +1,5 @@
 import { Flash } from "@/components/admin/Flash";
+import { RestrictedDocuments } from "@/components/admin/RestrictedDocuments";
 import { Badge, Notice, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -13,7 +14,7 @@ type Tot = { bill_id: string; paid: number; balance: number };
 const TONE = { draft: "grey", pending_approval: "amber", approved: "teal", partially_paid: "amber", paid: "green", void: "red" } as const;
 const LABEL: Record<string, string> = { draft: "Draft", pending_approval: "Awaiting approval", approved: "Approved, unpaid", partially_paid: "Part paid", paid: "Paid", void: "Void" };
 
-export default async function BillsPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; status?: string }> }) {
+export default async function BillsPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; status?: string; docs?: string }> }) {
   const sp = await searchParams;
   const ctx = await requirePermission("finance.view", "finance");
   const can = ctx.has("finance.bills") || ctx.isSuper;
@@ -40,6 +41,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
       <PageHeader title="Supplier bills" description="What you owe suppliers. A bill must be approved before a payment can be recorded, and the person who prepared it cannot record the payment. This system records payments; it never makes them." />
       <Flash ok={sp.ok} error={sp.error} />
       <div className="space-y-5">
+        {sp.docs && /^[0-9a-f-]{36}$/.test(sp.docs) && <RestrictedDocuments entityType="supplier_bill" entityId={sp.docs} backPath={`/admin/finance/bills?docs=${sp.docs}`} />}
         {pos.length > 0 && (
           <Panel title="Received orders without a bill">
             <ul className="space-y-2 text-sm">{pos.map((p) => (
@@ -77,7 +79,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0"><p className="font-semibold text-navy">{b.number} · {sn.get(b.supplier_id) ?? "Supplier"} <Badge tone={TONE[b.status as keyof typeof TONE] ?? "grey"}>{LABEL[b.status] ?? b.status}</Badge>{overdue ? <> <Badge tone="red">overdue</Badge></> : null}</p>
                         <p className="break-words text-charcoal">{b.description}{b.supplier_reference ? ` · their ref ${b.supplier_reference}` : ""}</p>
-                        <p className="text-xs text-grey-500">Due {day(b.due_date) || "not set"}</p></div>
+                        <p className="text-xs text-grey-500">Due {day(b.due_date) || "not set"} · <a href={`/admin/finance/bills?docs=${b.id}`} className="text-teal-dark underline">Documents</a></p></div>
                       <div className="text-right"><p className="font-semibold">{money(b.amount, b.currency)}</p>{t && t.paid > 0 && <p className="text-xs text-grey-500">Paid {money(t.paid, b.currency)} · balance {money(t.balance, b.currency)}</p>}</div>
                     </div>
                     {can && b.status === "draft" && (

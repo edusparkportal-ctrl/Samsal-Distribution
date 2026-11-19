@@ -6,7 +6,7 @@
  * checks its size and real content bytes against the extension (see inspectBytes).
  * SVG is not accepted: it can carry scripts.
  */
-export type BucketId = "public-media" | "private-docs";
+export type BucketId = "public-media" | "private-docs" | "restricted-docs";
 
 type Rule = { mime: string; kind: "jpeg" | "png" | "webp" | "pdf" | "zip" | "text" };
 const R = {
@@ -21,6 +21,7 @@ const R = {
 export const BUCKETS: Record<BucketId, { maxBytes: number; exts: (keyof typeof R)[]; label: string }> = {
   "public-media": { maxBytes: 5 * 1024 * 1024, exts: ["jpg", "jpeg", "png", "webp", "pdf"], label: "JPG, PNG, WebP or PDF up to 5 MB" },
   "private-docs": { maxBytes: 10 * 1024 * 1024, exts: ["pdf", "jpg", "jpeg", "png", "docx", "xlsx", "csv", "txt"], label: "PDF, JPG, PNG, DOCX, XLSX, CSV or TXT up to 10 MB" },
+  "restricted-docs": { maxBytes: 10 * 1024 * 1024, exts: ["pdf", "jpg", "jpeg", "png", "docx", "xlsx", "csv", "txt"], label: "PDF, JPG, PNG, DOCX, XLSX, CSV or TXT up to 10 MB" },
 };
 
 export const FOLDER_RE = /^[a-z0-9_-]{1,40}$/;

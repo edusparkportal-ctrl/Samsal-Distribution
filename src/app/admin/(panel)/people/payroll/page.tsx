@@ -80,7 +80,7 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                           <td className="pr-3">{draft && prepare ? <input name={`ded_${l.id}`} defaultValue={String(l.deductions)} inputMode="decimal" className="w-28 rounded border border-grey-300 px-2 py-1" aria-label="Deductions" /> : Number(l.deductions).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</td>
                           <td className="pr-3 text-right font-semibold">{Number(l.net_pay).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</td>
                           <td className="pr-3">{draft && prepare ? <input name={`note_${l.id}`} defaultValue={l.note ?? ""} maxLength={500} className="w-full min-w-40 rounded border border-grey-300 px-2 py-1" aria-label="Note" /> : l.note}</td>
-                          {draft && prepare && <td><button type="submit" formAction={removeLine} name="line" value={l.id} className="text-xs font-medium text-red-700 underline underline-offset-2">Remove</button></td>}
+                          {draft && prepare && <td><button type="submit" form={`rm_${l.id}`} className="text-xs font-medium text-red-700 underline underline-offset-2">Remove</button></td>}
                         </tr>
                       ))}
                     </tbody>
@@ -88,6 +88,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
                 </div>
                 {draft && prepare && <div className="mt-4 flex flex-wrap gap-2"><button className="btn-outline px-4 py-2 text-sm">Save deductions</button></div>}
               </form>
+              {draft && prepare && ((lines ?? []) as Line[]).map((l) => (
+                <form key={l.id} id={`rm_${l.id}`} action={removeLine}><input type="hidden" name="id" value={current.id} /><input type="hidden" name="line" value={l.id} /></form>
+              ))}
             )}
           </Panel>
 

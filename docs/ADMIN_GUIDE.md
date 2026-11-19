@@ -110,3 +110,41 @@ Notes
 - Stock is never changed automatically. Recording stock movements stays a deliberate action by inventory staff; the automation only watches the balances.
 - The tender checklist template (Tenders > Document checklists) is a generic starting point, not a statement of what any tender requires. Check each tender document.
 - Scheduling runs inside the database (every 5 minutes through pg_cron). If it is ever unavailable, use **Run now**; a daily backup run also happens through Vercel Cron.
+
+## Human Resources and Finance (internal modules, off by default)
+
+Two internal modules sit alongside the existing ones: **Human Resources** (key `people`) and **Finance** (key `finance`). They are separate from **HR Outsourcing** (key `hr`), which is the client-facing business line. A shared **Approvals** module (core, always on) drives every sign-off. Switch the modules on in Control Centre → Modules.
+
+### The rule that matters most
+**The system records payroll and payments. It never makes them.** Payroll runs, supplier bills and expense claims can only be marked *paid* after an authorised approval, and never by the person who prepared, submitted or claimed them. Money is moved outside the system (bank, M-Pesa); the record is then updated by an authorised person.
+
+### Human Resources
+- **Employees, departments, contracts, compensation:** records are visible only to people with the matching permission. Managers see their own reports. Compensation is a separate permission from the employee record.
+- **Recruitment:** vacancies and applicants; *Hire* creates the employee and starts onboarding.
+- **Onboarding:** a template of tasks is copied to each new starter.
+- **Attendance:** staff clock in and out under My HR; attendance alerts flag missing or late records.
+- **Leave:** staff apply; the request goes through the *leave* approval policy; balances update on approval.
+- **Payroll:** a run is generated, deductions are typed in by the preparer, then submitted for approval. No statutory rates (PAYE, NSSF, SHIF, housing levy) are built in. Enter them yourself and have an accountant confirm them.
+- **Performance reviews:** the employee acknowledges their review.
+- **Not stored:** ID numbers, bank details, health data.
+
+### Finance
+- **Ledger** (income and expenses), **categories**, **budgets** (with variance).
+- **Invoices:** create, issue, print, record receipts. Linked to customers, quotations and orders.
+- **Bills (accounts payable):** linked to suppliers and purchase orders; approval needed before payment.
+- **Expense claims:** staff submit; approval then payment recording.
+- **Reports:** cash flow, receivables and payables ageing, profit and loss, budget vs actual, monthly summary.
+
+### Approvals and roles
+- Approvals → Policies lets an administrator choose, per subject (leave, expense, bill, payroll), the steps and who approves (a role, a permission or the line manager). A subject with no active policy cannot be submitted: it fails closed.
+- Ready-made roles: `hr_officer`, `payroll_officer`, `finance_manager`, `accountant`. Permissions can be adjusted per role in Users and security.
+- Segregation of duties is enforced in the database, not just the screens.
+
+### Documents
+Contracts, applicant files, invoices, bills and claims accept attachments in a private bucket (`restricted-docs`). Access follows the record: if you cannot see the record you cannot open its files. Downloads use short-lived links and are logged.
+
+### Automations (Control Centre → Automation)
+Leave decision notices, attendance alerts, contract-expiry reminders, onboarding reminders, payroll-due reminders, invoice generation from confirmed orders, overdue payment reminders, expense approval nudges and the monthly financial report. All start in draft; staff notifications work immediately once enabled, email needs the global email switch and a verified sending domain.
+
+### Audit
+Every create, update, approval decision and payment record is written to the audit log with who and when.

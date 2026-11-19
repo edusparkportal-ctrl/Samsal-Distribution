@@ -5,6 +5,7 @@ import { Flash } from "@/components/admin/Flash";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { ResourceForm, type Lookups } from "@/components/admin/ResourceForm";
 import { RecordDocuments } from "@/components/admin/RecordDocuments";
+import { RestrictedDocuments } from "@/components/admin/RestrictedDocuments";
 import { Badge, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -57,6 +58,7 @@ export async function ResourceView({ def, sp }: ResourceViewProps) {
         ) : (
           <Panel className="max-w-3xl"><ResourceForm def={def} row={row} lookups={lookups} cancelHref={def.singleton ? undefined : base} /></Panel>
         )}
+        {row && def.restrictedDocs && <RestrictedDocuments entityType={def.restrictedDocs} entityId={String(row[def.pk])} backPath={`${base}?edit=${encodeURIComponent(String(row[def.pk]))}`} />}
         {row && def.documentType && <RecordDocuments entityType={def.documentType} entityId={String(row[def.pk])} canManage={canChange} backPath={`${base}?edit=${encodeURIComponent(String(row[def.pk]))}`} />}
       </>
     );
