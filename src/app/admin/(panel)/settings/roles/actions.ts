@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { checkPermission } from "@/lib/auth/session";
+import { checkPermission, checkStepUp } from "@/lib/auth/session";
 import { isPermission } from "@/lib/auth/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { dbError, flash, isUuid, optStr, str } from "@/lib/admin/forms";
@@ -62,4 +62,20 @@ export async function deleteRole(formData: FormData) {
   if (error) flash(`${PATH}?role=${roleId}`, "error", dbError(error));
   revalidatePath(PATH);
   flash(PATH, "ok", "Role deleted.");
+}
+
+/** Turn "requires two-step verification" on or off for a role. Super Administrator only (also enforced by the database). */
+export async function setRoleMfa(formData: FormData) {
+  const auth = await checkPermission("roles.manage");
+  if (!auth.ok) flash(PATH, "error", auth.error);
+  const step = await checkStepUp();
+  if (!step.ok) flash(PATH, "error", step.error);
+  const roleId = str(formData, "role_id", 40);
+  if (!isUuid(roleId)) flash(PATH, "error", "Invalid role.");
+  const sb = await createSupabaseServerClient();
+  const { data, error } = await sb.from("roles").update({ require_mfa: formData.get("require_mfa") === "on" }).eq("id", roleId).select("id");
+  if (error) flash(`${PATH}?role=${roleId}`, "error", dbError(error));
+  if (!data?.length) flash(`${PATH}?role=${roleId}`, "error", "Only a Super Administrator can change this.");
+  revalidatePath(PATH);
+  flash(`${PATH}?role=${roleId}`, "ok", "Saved.");
 }

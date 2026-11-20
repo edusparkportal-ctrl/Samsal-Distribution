@@ -2,6 +2,7 @@ import "server-only";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { requirePublicEnv } from "./env";
+import { hardenCookie } from "./cookies";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -20,7 +21,7 @@ export async function createSupabaseServerClient() {
       },
       setAll(list: CookieToSet[]) {
         try {
-          list.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          list.forEach(({ name, value, options }) => cookieStore.set(name, value, hardenCookie(options)));
         } catch {
           // Called from a Server Component, where cookies are read-only. The middleware refreshes the session.
         }

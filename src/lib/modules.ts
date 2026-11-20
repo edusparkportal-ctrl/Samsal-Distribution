@@ -171,7 +171,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     ],
   },
   { key: "reports", label: "Reports", icon: "chart", items: [{ label: "Reports", href: "/admin/reports", permission: "reports.view" }] },
-  { key: "audit", label: "Activity log", icon: "shield", items: [{ label: "Activity log", href: "/admin/audit", permission: "audit.view" }] },
+  { key: "audit", label: "Activity log", icon: "shield", items: [{ label: "Activity log", href: "/admin/audit", permission: "audit.view" }, { label: "Security", href: "/admin/security", permission: "security.view" }] },
 ];
 
 /**

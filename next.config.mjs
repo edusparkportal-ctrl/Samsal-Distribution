@@ -1,3 +1,5 @@
+import { baseSecurityHeaders, buildCsp, cspHeaderName } from "./src/lib/security/csp.mjs";
+
 // Images uploaded through the admin media library are served from the project's public Storage bucket.
 const supabaseHost = (() => {
   try {
@@ -33,16 +35,14 @@ const nextConfig = {
     return [...legacy, ...domainRedirects];
   },
   async headers() {
+    const dev = process.env.NODE_ENV !== "production";
+    const reportOnly = process.env.CSP_REPORT_ONLY === "1";
+    const csp = buildCsp({ dev, supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL, reportUri: "/api/csp-report" });
     return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-        ],
-      },
+      // Security headers on every response, including /admin and the API.
+      { source: "/:path*", headers: baseSecurityHeaders() },
+      // The public site gets the static policy. /admin gets a stricter, nonce-based one from src/middleware.ts.
+      { source: "/((?!admin).*)", headers: [{ key: cspHeaderName(reportOnly), value: csp }] },
     ];
   },
 };

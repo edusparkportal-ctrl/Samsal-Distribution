@@ -12,13 +12,16 @@ export const dynamic = "force-dynamic";
 const NOTICES: Record<string, string> = {
   pending: "Your account is signed in but has not been given access yet. Ask a Super Administrator to activate it and assign a role.",
   link: "That link is invalid or has expired. Request a new one.",
+  security_setup: "The admin area is waiting for a security update to the database (multi-factor authentication). Ask the person who manages the system to apply the latest database migrations, then try again.",
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reason?: string; error?: string }> }) {
   const sp = await searchParams;
   const session = await getSession();
   if (session.status === "ok") redirect(safeNext(sp.next));
-  const notice = NOTICES[sp.reason ?? sp.error ?? ""];
+  if (session.status === "mfa_verify") redirect(`/admin/mfa/verify?next=${encodeURIComponent(safeNext(sp.next))}`);
+  if (session.status === "mfa_enroll") redirect(`/admin/mfa/setup?next=${encodeURIComponent(safeNext(sp.next))}`);
+  const notice = NOTICES[sp.reason ?? sp.error ?? ""] ?? (session.status === "security_setup" ? NOTICES.security_setup : undefined);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-navy px-4 py-12">

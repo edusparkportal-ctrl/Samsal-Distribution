@@ -4,11 +4,11 @@ import { Badge, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createRole, deleteRole, saveRolePermissions } from "./actions";
+import { createRole, deleteRole, saveRolePermissions, setRoleMfa } from "./actions";
 
 export const metadata = { title: "Roles & permissions" };
 
-type Role = { id: string; key: string; name: string; description: string | null; is_system: boolean; is_super: boolean };
+type Role = { id: string; key: string; name: string; description: string | null; is_system: boolean; is_super: boolean; require_mfa: boolean };
 type PermRow = { key: string; module: string; description: string };
 
 export default async function RolesPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; role?: string }> }) {
@@ -16,7 +16,7 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
   const ctx = await requirePermission("roles.manage");
   const sb = await createSupabaseServerClient();
   const [{ data: roles }, { data: perms }] = await Promise.all([
-    sb.from("roles").select("id, key, name, description, is_system, is_super").order("name"),
+    sb.from("roles").select("id, key, name, description, is_system, is_super, require_mfa").order("name"),
     sb.from("permissions").select("key, module, description").order("module").order("key"),
   ]);
   const roleList = (roles ?? []) as Role[];
@@ -66,6 +66,18 @@ export default async function RolesPage({ searchParams }: { searchParams: Promis
               </div>
               {ctx.isSuper && !selected.is_system && (
                 <form action={deleteRole}><input type="hidden" name="role_id" value={selected.id} /><button className="rounded border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">Delete role</button></form>
+              )}
+            </div>
+            <div className="mb-5 rounded border border-grey-200 p-3 text-sm">
+              {selected.is_super ? (
+                <p><strong className="text-navy">Two-step verification:</strong> always required for this role.</p>
+              ) : (
+                <form action={setRoleMfa} className="flex flex-wrap items-center gap-3">
+                  <input type="hidden" name="role_id" value={selected.id} />
+                  <label className="flex items-center gap-2"><input type="checkbox" name="require_mfa" defaultChecked={selected.require_mfa} disabled={!ctx.isSuper} className="h-4 w-4 accent-teal" />
+                    <span><strong className="text-navy">Require two-step verification</strong> <span className="text-grey-500">(people in this role cannot use the admin area until they set up an authenticator app)</span></span></label>
+                  {ctx.isSuper && <button className="btn-outline px-3 py-1.5 text-sm">Save</button>}
+                </form>
               )}
             </div>
             {selected.is_super ? (

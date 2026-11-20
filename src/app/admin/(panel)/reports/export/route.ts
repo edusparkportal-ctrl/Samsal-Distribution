@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { checkPermission } from "@/lib/auth/session";
+import { checkPermission, requireStepUp } from "@/lib/auth/session";
+import { logSecurityEvent } from "@/lib/security/events";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/csv";
 
@@ -8,9 +9,12 @@ const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? nul
 const csv = (name: string, body: string) => new NextResponse(body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" } });
 
 export async function GET(req: Request) {
-  const type = new URL(req.url).searchParams.get("type");
+  const url = new URL(req.url);
+  const type = url.searchParams.get("type");
   const rep = await checkPermission("reports.view", "reports");
   if (!rep.ok) return new NextResponse(rep.error, { status: 403 });
+  const ctx = await requireStepUp(`${url.pathname}${url.search}`); // data export: fresh authenticator code
+  await logSecurityEvent("export_data", { actor: ctx.userId, detail: { what: `report:${(type ?? "").slice(0, 30)}` } });
   const sb = await createSupabaseServerClient();
   if (type === "enquiries") {
     const a = await checkPermission("enquiries.export", "crm");

@@ -1,0 +1,42 @@
+# Daily external check of the live site: headers, health endpoint, TLS expiry. Reads nothing secret.
+name: Security monitor
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      url: { description: "Site URL", default: "https://samsal.co.ke" }
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SITE: ${{ github.event.inputs.url || 'https://samsal.co.ke' }}
+    steps:
+      - name: Security headers
+        run: |
+          set -u
+          h=$(curl -sSI --max-time 20 "$SITE/" | tr -d '\r' | tr 'A-Z' 'a-z')
+          bad=0
+          for k in strict-transport-security content-security-policy x-content-type-options referrer-policy permissions-policy; do
+            echo "$h" | grep -q "^$k:" || { echo "::error::Missing header: $k"; bad=1; }
+          done
+          echo "$h" | grep -q "^x-powered-by:" && { echo "::error::X-Powered-By is exposed"; bad=1; }
+          exit $bad
+      - name: Admin is not indexable and requires sign-in
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/admin")
+          echo "GET /admin -> $code"
+          case "$code" in 200) echo "::error::/admin served without sign-in"; exit 1;; esac
+      - name: Health endpoint
+        run: |
+          out=$(curl -sS --max-time 20 -w '\n%{http_code}' "$SITE/api/health")
+          code=$(echo "$out" | tail -n1); echo "health -> $code"
+          [ "$code" = 200 ] || { echo "::error::/api/health returned $code"; exit 1; }
+      - name: TLS certificate expiry (warn under 21 days)
+        run: |
+          host=$(echo "$SITE" | sed -E 's#https?://([^/]+).*#\1#')
+          end=$(echo | openssl s_client -servername "$host" -connect "$host:443" 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+          days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 )); echo "expires in $days days"
+          [ "$days" -ge 21 ] || { echo "::error::Certificate expires in $days days"; exit 1; }

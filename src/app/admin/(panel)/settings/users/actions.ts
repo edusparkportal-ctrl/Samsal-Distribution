@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { checkPermission } from "@/lib/auth/session";
+import { checkPermission, checkStepUp } from "@/lib/auth/session";
+import { logSecurityEvent } from "@/lib/security/events";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceClient, isServiceClientConfigured } from "@/lib/supabase/admin";
 import { bool, dbError, flash, isUuid, str } from "@/lib/admin/forms";
@@ -52,4 +53,33 @@ export async function updateUserAccess(formData: FormData) {
   if (error) flash(PATH, "error", dbError(error));
   revalidatePath(PATH);
   flash(PATH, "ok", "User access updated.");
+}
+
+/**
+ * Lost phone? A Super Administrator removes someone's authenticator so they can set up a new one at next sign-in.
+ * Needs a fresh code from the administrator, is recorded as a critical security event, and cannot be used on yourself.
+ */
+export async function resetUserMfa(formData: FormData) {
+  const auth = await checkPermission("users.manage");
+  if (!auth.ok) flash(PATH, "error", auth.error);
+  if (!auth.ctx.isSuper) flash(PATH, "error", "Only a Super Administrator can reset two-step verification.");
+  const step = await checkStepUp();
+  if (!step.ok) flash(PATH, "error", step.error);
+  const id = str(formData, "id", 40);
+  if (!isUuid(id)) flash(PATH, "error", "Invalid request.");
+  if (id === auth.ctx.userId) flash(PATH, "error", "Use My account to manage your own authenticator.");
+  if (!isServiceClientConfigured()) flash(PATH, "error", "Resetting needs SUPABASE_SERVICE_ROLE_KEY on the server.");
+  const limited = await rateLimit(`mfareset:${auth.ctx.userId}`, 10, 60 * 60 * 1000, { failure: "degraded" });
+  if (!limited.ok) flash(PATH, "error", "Too many resets. Try again later.");
+  const svc = createServiceClient();
+  const { data: list, error } = await svc.auth.admin.mfa.listFactors({ userId: id });
+  if (error) flash(PATH, "error", "The authenticators could not be read.");
+  let removed = 0;
+  for (const f of list?.factors ?? []) {
+    const { error: dErr } = await svc.auth.admin.mfa.deleteFactor({ id: f.id, userId: id });
+    if (!dErr) removed += 1;
+  }
+  await logSecurityEvent("mfa_reset", { severity: "critical", actor: auth.ctx.userId, detail: { target: id, removed } });
+  revalidatePath(PATH);
+  flash(PATH, "ok", removed ? "Two-step verification was reset. They will set up a new authenticator at their next sign-in." : "That person had no authenticator to reset.");
 }

@@ -3,7 +3,7 @@ import { Badge, PageHeader, Panel } from "@/components/admin/ui";
 import { requirePermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isServiceClientConfigured } from "@/lib/supabase/admin";
-import { inviteUser, updateUserAccess } from "./actions";
+import { inviteUser, resetUserMfa, updateUserAccess } from "./actions";
 
 export const metadata = { title: "Users" };
 
@@ -65,6 +65,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   <button className="btn-outline px-4 py-2 text-sm disabled:opacity-50" disabled={locked}>Save</button>
                 </form>
                 {locked && <p className="mt-1 text-xs text-grey-500">{self ? "You cannot change your own role or status." : "Only a Super Administrator can change this account."}</p>}
+                {ctx.isSuper && !self && (
+                  <form action={resetUserMfa} className="mt-2"><input type="hidden" name="id" value={u.id} />
+                    <button className="text-xs font-medium text-red-700 underline underline-offset-2" title="Use when someone has lost their phone">Reset two-step verification</button>
+                  </form>
+                )}
               </li>
             );
           })}

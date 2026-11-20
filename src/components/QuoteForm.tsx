@@ -326,6 +326,11 @@ export function QuoteForm({
         </Field>
       )}
 
+      {!turnstileSiteKey && process.env.NODE_ENV === "production" && (
+        <p role="alert" className="rounded-md border border-amber/60 bg-amber/10 px-3 py-2 text-sm text-charcoal">
+          Online requests are temporarily unavailable. Please contact us by telephone or WhatsApp.
+        </p>
+      )}
       {turnstileSiteKey && (
         <>
           <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" />

@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { isPermission, type Permission } from "@/lib/auth/permissions";
 import type { ModuleKey } from "@/lib/modules";
+import { MFA_MARKER, STEP_UP_MAX_AGE_SECONDS, assuranceFromClaims, decodeJwtClaims, isRecentMfa } from "@/lib/security/mfa";
 
 export type StaffContext = {
   userId: string;
@@ -18,12 +19,17 @@ export type StaffContext = {
   modules: Readonly<Record<string, boolean>>;
   has: (p: Permission) => boolean;
   moduleEnabled: (k: ModuleKey) => boolean;
+  /** Second-factor state of this session (see lib/security/mfa.ts). */
+  mfa: { required: boolean; enrolled: boolean; aal: "aal1" | "aal2"; recent: boolean };
 };
 
 export type SessionState =
   | { status: "unconfigured" }
   | { status: "anonymous" }
   | { status: "pending"; email: string } // signed in but no role / not activated
+  | { status: "mfa_verify" } // signed in with a password; must enter an authenticator code
+  | { status: "mfa_enroll" } // role requires MFA but no authenticator is set up yet
+  | { status: "security_setup" } // the database security update has not been applied: fail closed
   | { status: "ok"; ctx: StaffContext };
 
 /**
@@ -37,6 +43,22 @@ export const getSession = cache(async (): Promise<SessionState> => {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { status: "anonymous" };
+
+  // ---- Multi-factor gate (also enforced by the database: a role that requires MFA has no data access at aal1) ----
+  const [mfaReq, aalRes, sessionRes] = await Promise.all([
+    supabase.rpc("my_mfa_required"),
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.auth.getSession(),
+  ]);
+  if (mfaReq.error) return { status: "security_setup" }; // unknown -> closed (e.g. migration not applied yet)
+  const required = mfaReq.data === true;
+  const enrolled = (user.factors ?? []).some((f) => f.status === "verified");
+  const currentAal = aalRes.data?.currentLevel === "aal2" ? "aal2" : "aal1";
+  if (currentAal !== "aal2") {
+    if (enrolled) return { status: "mfa_verify" };
+    if (required) return { status: "mfa_enroll" };
+  }
+  const assurance = assuranceFromClaims(decodeJwtClaims(sessionRes.data.session?.access_token));
 
   const [{ data: profile }, { data: perms }, { data: mods }] = await Promise.all([
     supabase.from("profiles").select("full_name, job_title, is_active, role:roles(key, name, is_super)").eq("id", user.id).maybeSingle(),
@@ -65,6 +87,7 @@ export const getSession = cache(async (): Promise<SessionState> => {
       modules,
       has: (p) => permissions.has(p),
       moduleEnabled: (k) => modules[k] === true,
+      mfa: { required, enrolled, aal: assurance.aal, recent: isRecentMfa(assurance, STEP_UP_MAX_AGE_SECONDS) },
     },
   };
 });
@@ -74,7 +97,29 @@ export async function requireStaff(): Promise<StaffContext> {
   const s = await getSession();
   if (s.status === "ok") return s.ctx;
   if (s.status === "pending") redirect("/admin/login?reason=pending");
+  if (s.status === "mfa_verify") redirect("/admin/mfa/verify");
+  if (s.status === "mfa_enroll") redirect("/admin/mfa/setup");
+  if (s.status === "security_setup") redirect("/admin/login?reason=security_setup");
   redirect("/admin/login");
+}
+
+/**
+ * For pages and routes that open or export sensitive data: needs a second-factor check in the last 15 minutes.
+ * Sends the person to the verification page (or to set up an authenticator first) and brings them back.
+ */
+export async function requireStepUp(returnTo: string): Promise<StaffContext> {
+  const ctx = await requireStaff();
+  if (ctx.mfa.recent) return ctx;
+  const next = encodeURIComponent(returnTo.startsWith("/admin") ? returnTo : "/admin");
+  redirect(ctx.mfa.enrolled ? `/admin/mfa/verify?next=${next}&fresh=1` : `/admin/mfa/setup?next=${next}`);
+}
+
+/** Non-redirecting variant for server actions. The message starts with the MFA marker so the page can offer a "Verify now" link. */
+export async function checkStepUp(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (s.status !== "ok") return { ok: false, error: "Your session has expired. Please sign in again." };
+  if (s.ctx.mfa.recent) return { ok: true };
+  return { ok: false, error: `${MFA_MARKER} This action needs a fresh authenticator code. Verify now, then repeat it.` };
 }
 
 /**
@@ -94,6 +139,7 @@ export async function checkPermission(
   module?: ModuleKey,
 ): Promise<{ ok: true; ctx: StaffContext } | { ok: false; error: string }> {
   const s = await getSession();
+  if (s.status === "mfa_verify" || s.status === "mfa_enroll") return { ok: false, error: `${MFA_MARKER} Multi-factor verification is required before you can continue.` };
   if (s.status !== "ok") return { ok: false, error: "Your session has expired. Please sign in again." };
   const ctx = s.ctx;
   if (!ctx.has(permission) && !ctx.isSuper) return { ok: false, error: "You do not have permission to do that." };

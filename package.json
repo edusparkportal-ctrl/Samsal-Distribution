@@ -13,7 +13,11 @@
     "typecheck": "tsc --noEmit",
     "brand:assets": "node scripts/generate-brand-assets.cjs",
     "db:seed:generate": "tsx scripts/generate-seed.ts",
-    "db:test": "bash supabase/tests/run-local.sh"
+    "db:test": "bash supabase/tests/run-local.sh",
+    "test:security": "tsx tests/security.test.ts",
+    "security:audit": "node scripts/security-audit.mjs",
+    "security:deps": "npm audit --omit=dev --audit-level=high",
+    "check": "npm run typecheck && npm run security:audit && npm run test:security"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

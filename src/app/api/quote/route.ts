@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { inspectAttachment } from "@/lib/file-check";
-import { MIN_FILL_MS, verifyToken } from "@/lib/form-token";
+import { MIN_FILL_MS, consumeToken, verifyToken } from "@/lib/form-token";
+import { verifyTurnstile } from "@/lib/captcha";
+import { clientIp as ipFrom, originAllowed as originOk } from "@/lib/security/request";
+import { missingPublicFormControls } from "@/lib/security/env";
+import { logSecurityEvent } from "@/lib/security/events";
 import { saveWebsiteEnquiry } from "@/lib/enquiries";
 import { dispatchOutbox } from "@/lib/automation/dispatch";
 import { rateLimit } from "@/lib/rate-limit";
@@ -24,43 +28,11 @@ function json(body: Record<string, unknown>, status = 200, headers?: Record<stri
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
 }
 
-function clientIp(req: Request) {
-  const fwd = req.headers.get("x-forwarded-for");
-  return (fwd?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "unknown").trim();
-}
+const clientIp = (req: Request) => ipFrom(req.headers);
+const originAllowed = (req: Request) => originOk(req.headers);
 
-/** Only accept browser submissions from our own site (blocks simple cross-site posting). */
-function originAllowed(req: Request) {
-  const origin = req.headers.get("origin");
-  if (!origin) return true; // non-browser clients / same-origin GET-style requests: other checks still apply
-  try {
-    const o = new URL(origin);
-    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
-    if (o.host === host) return true;
-    const configured = process.env.NEXT_PUBLIC_SITE_URL;
-    if (configured && o.host === new URL(configured).host) return true;
-    return o.hostname === "localhost";
-  } catch {
-    return false;
-  }
-}
-
-async function verifyTurnstile(token: string, ip: string) {
-  const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return true; // not configured -> skip
-  if (!token) return false;
-  try {
-    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ secret, response: token, remoteip: ip }),
-    });
-    const data = (await res.json()) as { success?: boolean };
-    return data.success === true;
-  } catch {
-    return false;
-  }
-}
+const UNAVAILABLE =
+  "Online requests are temporarily unavailable. Please contact us by telephone or WhatsApp, or try again later.";
 
 function buildEmail(kind: FormKind, v: FormValues, fileName: string | null) {
   const rows: [string, string][] =
@@ -116,15 +88,33 @@ export async function POST(req: Request) {
 
   // ---- Cheap rejections first (before reading the body) ----------------
   if (!originAllowed(req)) {
+    await logSecurityEvent("origin_rejected", { severity: "info", ip, detail: { where: "quote" } });
     return json({ ok: false, message: "This request was not accepted." }, 403);
   }
+
+  // FAIL CLOSED: in production the spam controls are mandatory. If any is not configured, nothing is accepted.
+  if (process.env.NODE_ENV === "production") {
+    const missing = missingPublicFormControls();
+    if (missing.length > 0) {
+      console.error(`[quote api] Refusing submissions: required security settings are missing: ${missing.join(", ")}`);
+      await logSecurityEvent("config_missing", { severity: "critical", detail: { where: "quote", missing: missing.join(",") } });
+      return json({ ok: false, message: UNAVAILABLE }, 503);
+    }
+  }
+
+  // The body size must be declared (browsers always declare it) and within the limit, before anything is read.
   const declaredLength = Number(req.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+  if (!Number.isFinite(declaredLength) || declaredLength <= 0) {
+    return json({ ok: false, message: "This request was not accepted." }, 411);
+  }
+  if (declaredLength > MAX_BODY_BYTES) {
     return json({ ok: false, message: "Your submission is too large. Attachments are limited to 4 MB." }, 413);
   }
 
-  const rl = await rateLimit(`quote:${ip}`);
+  const rl = await rateLimit(`quote:${ip}`); // fails closed when the shared store is unavailable
   if (!rl.ok) {
+    await logSecurityEvent("ratelimit_block", { severity: rl.reason === "limited" ? "info" : "critical", ip, detail: { where: "quote", reason: rl.reason ?? "limited" } });
+    if (rl.reason !== "limited") return json({ ok: false, message: UNAVAILABLE }, 503, { "Retry-After": String(rl.retryAfter) });
     return json(
       { ok: false, message: "Too many submissions. Please wait a few minutes and try again, or contact us directly." },
       429,
@@ -144,17 +134,27 @@ export async function POST(req: Request) {
   if (String(form.get("website") ?? "") !== "") {
     return json({ ok: true, message: "Thank you." });
   }
-  // 2. Server-signed timing token (cannot be forged by the client). Skipped only if FORM_TOKEN_SECRET is unset.
-  const tokenResult = verifyToken(String(form.get("formToken") ?? ""));
+  // 2. Server-signed, single-use timing token (cannot be forged by the client). Mandatory in production.
+  const formToken = String(form.get("formToken") ?? "");
+  const tokenResult = verifyToken(formToken);
+  if (tokenResult === "unconfigured") return json({ ok: false, message: UNAVAILABLE }, 503);
   if (tokenResult !== "ok" && tokenResult !== "skipped") {
+    await logSecurityEvent("token_failed", { severity: "info", ip, detail: { reason: tokenResult } });
     const msg =
       tokenResult === "too_fast"
         ? "Please take a moment to review the form and submit again."
         : "Your form session expired. Please refresh the page and submit again.";
     return json({ ok: false, message: msg, retry: true, minWaitMs: MIN_FILL_MS }, 400);
   }
-  // 3. Optional Cloudflare Turnstile
-  if (!(await verifyTurnstile(String(form.get("cf-turnstile-response") ?? ""), ip))) {
+  if (tokenResult === "ok" && !(await consumeToken(formToken))) {
+    await logSecurityEvent("token_failed", { severity: "warning", ip, detail: { reason: "replayed" } });
+    return json({ ok: false, message: "Your form session expired. Please refresh the page and submit again.", retry: true, minWaitMs: MIN_FILL_MS }, 400);
+  }
+  // 3. Cloudflare Turnstile. Mandatory in production: a missing secret, token or an unreachable service all refuse.
+  const captcha = await verifyTurnstile(String(form.get("cf-turnstile-response") ?? ""), ip);
+  if (!captcha.ok) {
+    await logSecurityEvent("captcha_failed", { severity: captcha.reason === "unconfigured" ? "critical" : "info", ip, detail: { reason: captcha.reason } });
+    if (captcha.reason === "unconfigured" || captcha.reason === "unavailable") return json({ ok: false, message: UNAVAILABLE }, 503);
     return json({ ok: false, message: "Spam check failed. Please refresh the page and try again." }, 400);
   }
 

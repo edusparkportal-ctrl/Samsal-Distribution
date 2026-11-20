@@ -1,0 +1,65 @@
+# Automated security checks on every push / pull request, plus a weekly run so new advisories are noticed.
+name: Security checks
+on:
+  push:
+    branches: [main, version-3]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static:
+    name: Static audit, unit tests, types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Lockfile policy
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::warning::package-lock.json is missing. Run 'npm install' locally and commit the lockfile so builds are reproducible."
+            npm install --no-audit --no-fund --package-lock-only
+          fi
+      - run: npm ci || npm install --no-audit --no-fund
+      - run: npm run security:audit
+      - run: npm run test:security
+      - run: npm run typecheck
+      - name: Secret scan (patterns only, never prints values)
+        run: |
+          set -u
+          pat='(sb_secret_[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}|re_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{30,})'
+          hits=$(git ls-files | grep -v -E '^(package-lock\.json|docs/|tests/)' | xargs grep -I -l -E "$pat" 2>/dev/null || true)
+          if [ -n "$hits" ]; then echo "::error::Possible secret in: $hits"; exit 1; fi
+          echo "No secret patterns found."
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --no-audit --no-fund --package-lock-only
+      - name: npm audit (production dependencies, high and above)
+        run: npm audit --omit=dev --audit-level=high
+  database:
+    name: Database policy and storage tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: RLS, MFA, structural and storage tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: ./supabase/tests/run-local.sh

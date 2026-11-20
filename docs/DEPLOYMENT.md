@@ -72,3 +72,13 @@ New migrations (apply in order; the GitHub workflow does this on push to `main`)
 
 ### Security notes
 Sensitive tables have RLS on and no anon access; every read is gated by `public.can(permission, module)`, so switching a module off hides its data even from administrators' queries. Restricted documents are served through an authenticated route with permission checks, never public URLs.
+
+## Security hardening release (do in this order)
+
+1. Fix the `SUPABASE_DB_PASSWORD` GitHub secret so migrations can apply (see the migration section above).
+2. In Supabase enable TOTP MFA. Make sure at least two Super Administrators exist.
+3. In Vercel set `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `FORM_TOKEN_SECRET`, `CRON_SECRET`. Without them the public forms return 503 in production.
+4. Apply migration `20261119100000_security_hardening` **before or together with** the application. If the app is live first, the admin shows a "security setup" notice and nobody can sign in.
+5. Optionally deploy with `CSP_REPORT_ONLY=1` first, watch `/api/csp-report` logs, then remove it.
+6. After deploy: sign in, enrol MFA, open Admin > Security, run the `Security monitor` workflow manually.
+7. Run `npm install` locally and commit `package-lock.json`.

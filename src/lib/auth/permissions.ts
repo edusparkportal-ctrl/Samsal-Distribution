@@ -52,6 +52,7 @@ export const PERMISSIONS = {
   "automation.view": "View automation rules, run logs and the outbox",
   "automation.manage": "Switch automations on or off, change schedules and settings, run them now and retry failures",
   "audit.view": "View the activity log",
+  "security.view": "View the security dashboard: sign-in failures, rate-limit blocks, MFA coverage and configuration checks",
   "reports.view": "View and export reports",
 } as const;
 

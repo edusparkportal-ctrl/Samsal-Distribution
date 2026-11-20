@@ -1,0 +1,58 @@
+# Weekly backup recovery drill: dump the production schema+data with the existing DB secret, restore it into a throw-away
+# Postgres, verify structure and security properties, then destroy it. Nothing is uploaded or logged except counts.
+name: Backup recovery drill
+on:
+  schedule:
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  SUPABASE_PROJECT_REF: xzjlxonnwmxzybxoupjd
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secrets present?
+        run: |
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] || { echo "::error::Supabase secrets are not configured; see docs/SECURITY.md"; exit 1; }
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Dump production (schema + data, public schema)
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          supabase db dump --linked -f "$RUNNER_TEMP/schema.sql" --schema public
+          supabase db dump --linked --data-only --use-copy -f "$RUNNER_TEMP/data.sql" --schema public
+      - name: Restore into a scratch database
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql -h localhost -U postgres -q -f supabase/tests/stubs.sql >/dev/null 2>&1 || true
+          psql -h localhost -U postgres -v ON_ERROR_STOP=0 -q -f "$RUNNER_TEMP/schema.sql" >/dev/null 2>"$RUNNER_TEMP/schema.err" || true
+          psql -h localhost -U postgres -v ON_ERROR_STOP=0 -q -f "$RUNNER_TEMP/data.sql" >/dev/null 2>"$RUNNER_TEMP/data.err" || true
+          echo "restore warnings: schema=$(wc -l < "$RUNNER_TEMP/schema.err") data=$(wc -l < "$RUNNER_TEMP/data.err") (lines, content not printed)"
+      - name: Verify the restore
+        env: { PGPASSWORD: postgres }
+        run: |
+          q() { psql -h localhost -U postgres -Atq -c "$1"; }
+          tables=$(q "select count(*) from pg_tables where schemaname='public'")
+          norls=$(q "select count(*) from pg_tables where schemaname='public' and not rowsecurity")
+          settings=$(q "select count(*) from public.company_settings" || echo 0)
+          echo "tables=$tables tables_without_rls=$norls company_settings_rows=$settings"
+          [ "$tables" -ge 30 ] || { echo "::error::Restore looks incomplete"; exit 1; }
+          [ "$norls" = 0 ] || { echo "::error::Restored tables without RLS"; exit 1; }
+          [ "$settings" -ge 1 ] || { echo "::error::company_settings is empty"; exit 1; }
+      - name: Destroy dumps
+        if: always()
+        run: shred -u "$RUNNER_TEMP"/*.sql "$RUNNER_TEMP"/*.err 2>/dev/null || rm -f "$RUNNER_TEMP"/*.sql "$RUNNER_TEMP"/*.err

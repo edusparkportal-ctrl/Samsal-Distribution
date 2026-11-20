@@ -51,6 +51,8 @@ Once sent, a quotation is locked; to change it, cancel it and prepare a new one.
 ## Users and security
 - **Settings > Users**: invite staff by email, assign a role, deactivate (never share logins). Only a Super Administrator can change roles; the database prevents changing your own privileges and prevents removing the last Super Administrator.
 - Use long, unique passwords. Deactivate leavers the same day.
+- **Two-step verification**: required for sensitive roles. Set it up under Account (scan the QR code with an authenticator app). Sensitive actions ask for a fresh code (valid 15 minutes). If a device is lost, another Super Administrator uses Settings > Users > Reset MFA.
+- **Security** (Audit menu): posture checks, MFA coverage and recent security events. See docs/SECURITY.md.
 - **Activity log** shows who changed what and when; entries cannot be altered.
 - **Reports**: counts and CSV exports.
 

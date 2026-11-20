@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { checkPermission } from "@/lib/auth/session";
+import { checkPermission, checkStepUp, requireStaff } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { RESTRICTED_ENTITIES, isRestrictedEntity } from "@/lib/restricted-docs";
 import { STORAGE_PATH_RE, extensionOf, inspectBytes } from "@/lib/media";
@@ -44,6 +44,9 @@ export async function removeRestrictedDocument(fd: FormData) {
   const id = str(fd, "id", 40), back = str(fd, "back", 200);
   const safeBack = /^\/admin\/[a-zA-Z0-9/_?=&%-]*$/.test(back) ? back : "/admin";
   if (!isUuid(id)) flash(safeBack, "error", "Invalid request.");
+  await requireStaff(); // the database decides which record; this stops anyone who is not signed-in staff before any query
+  const step = await checkStepUp(); // deleting HR / Finance records needs a fresh authenticator code
+  if (!step.ok) flash(safeBack, "error", step.error);
   const sb = await createSupabaseServerClient();
   const { data: doc } = await sb.from("restricted_documents").select("id, storage_path").eq("id", id).maybeSingle();
   if (!doc) flash(safeBack, "error", "Document not found.");

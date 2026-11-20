@@ -12,9 +12,15 @@ grant usage on schema tst to public;
 grant all on tst.results to public;
 grant usage on sequence tst.results_n_seq to public;
 
-create function tst.admin() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); end $$;
-create function tst.anon() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); set role anon; end $$;
-create function tst.as_user(u uuid) returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', u::text, false); set role authenticated; end $$;
+create function tst.admin() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); perform set_config('request.jwt.claims', '', false); end $$;
+create function tst.anon() returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', '', false); perform set_config('request.jwt.claims', '', false); set role anon; end $$;
+-- as_user = a signed-in user whose session passed MFA just now (aal2); as_user_aal1 = password only.
+create function tst.as_user(u uuid) returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', u::text, false);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', u, 'role', 'authenticated', 'aal', 'aal2', 'amr', jsonb_build_array(jsonb_build_object('method', 'totp', 'timestamp', extract(epoch from now())::bigint)))::text, false); set role authenticated; end $$;
+create function tst.as_user_aal1(u uuid) returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', u::text, false);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', u, 'role', 'authenticated', 'aal', 'aal1', 'amr', jsonb_build_array(jsonb_build_object('method', 'password', 'timestamp', extract(epoch from now())::bigint)))::text, false); set role authenticated; end $$;
+create function tst.as_user_stale_mfa(u uuid) returns void language plpgsql as $$ begin reset role; perform set_config('request.jwt.claim.sub', u::text, false);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', u, 'role', 'authenticated', 'aal', 'aal2', 'amr', jsonb_build_array(jsonb_build_object('method', 'totp', 'timestamp', extract(epoch from now())::bigint - 7200)))::text, false); set role authenticated; end $$;
 create function tst.ok(cond boolean, lbl text) returns void language plpgsql as $$ begin insert into tst.results(passed,label) values (coalesce(cond,false), lbl); end $$;
 create function tst.count_is(q text, expected bigint, lbl text) returns void language plpgsql as $$
 declare c bigint; begin execute q into c; insert into tst.results(passed,label,detail) values (c = expected, lbl, 'got '||c||' expected '||expected); end $$;
@@ -549,6 +555,165 @@ select tst.as_user('b0000000-0000-0000-0000-000000000002');
 select tst.count_is($$select count(*) from public.restricted_documents$$, 0, 'with the HR module off, HR documents are closed');
 select tst.admin();
 update public.modules set enabled = true where key = 'people';
+
+-- ====================================================================================================
+-- ---------------- security hardening: MFA, sensitive operations, storage, monitoring ----------------
+-- ====================================================================================================
+create function tst.fails_like(q text, pattern text, lbl text) returns void language plpgsql as $$
+begin
+  begin execute q; insert into tst.results(passed,label,detail) values (false, lbl, 'statement unexpectedly succeeded');
+  exception when others then insert into tst.results(passed,label,detail) values (sqlerrm like pattern, lbl, sqlerrm); end;
+end $$;
+
+select tst.admin();
+-- (the fixtures above gave super, hr_officer, finance_manager users and the non-MFA role staff_basic)
+-- ---- A. session assurance --------------------------------------------------------------------------
+select tst.ok(public.mfa_ok(900), 'internal contexts (no end user) are never blocked by MFA rules');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.ok(public.is_staff() and public.is_super_admin(), 'MFA: a Super Administrator with an aal2 session is staff');
+select tst.ok(coalesce(array_length(public.my_permissions(), 1), 0) > 10, 'MFA: ... and has permissions');
+select tst.ok(public.my_mfa_required(), 'MFA: the Super Administrator role requires MFA');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000001');
+select tst.ok(not public.is_staff(), 'MFA: a Super Administrator with a password-only session is NOT staff');
+select tst.ok(not public.is_super_admin(), 'MFA: ... is not Super Administrator');
+select tst.ok(not public.has_permission('users.manage'), 'MFA: ... holds no permission');
+select tst.ok(coalesce(array_length(public.my_permissions(), 1), 0) = 0, 'MFA: ... my_permissions() is empty');
+select tst.count_is($$select count(*) from public.employees$$, 0, 'MFA: ... cannot read employees through the API');
+select tst.count_is($$select count(*) from public.approval_requests$$, 0, 'MFA: ... cannot read approval requests');
+select tst.ok(public.my_mfa_required(), 'MFA: ... the app can still ask whether MFA is required');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000002');
+select tst.ok(not public.has_permission('people.view'), 'MFA: an HR officer on a password-only session has no HR access');
+select tst.count_is($$select count(*) from public.employees$$, 0, 'MFA: ... and sees no employees');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.ok(public.has_permission('people.view'), 'MFA: after the second factor the HR officer has HR access');
+select tst.ok((select count(*) from public.employees) > 0, 'MFA: ... and sees the directory');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000007');
+select tst.ok(not public.my_mfa_required(), 'MFA: a basic staff role does not have to use MFA');
+select tst.ok(public.is_staff(), 'MFA: ... and works on a password-only session (nothing sensitive is open to it)');
+select tst.anon();
+select tst.fails($$select public.mfa_ok(900)$$, 'MFA: anonymous visitors cannot call the MFA helpers');
+select tst.fails($$select public.my_mfa_required()$$, 'MFA: ... nor my_mfa_required()');
+
+-- ---- B. sensitive operations need a RECENT check ---------------------------------------------------
+select tst.admin();
+select tst.as_user_stale_mfa('b0000000-0000-0000-0000-000000000001');
+select tst.ok(public.is_super_admin(), 'MFA: a session verified two hours ago is still aal2');
+select tst.fails_like($$update public.profiles set role_id = (select id from public.roles where key='hr_head') where email='alice@t.test'$$, '%[mfa]%', 'MFA: changing someone''s role needs a fresh check');
+select tst.fails_like($$update public.roles set description = 'changed' where key='staff_basic'$$, '%[mfa]%', 'MFA: editing a role needs a fresh check');
+select tst.fails_like($$insert into public.role_permissions(role_id, permission_key) select id, 'people.view' from public.roles where key='staff_basic'$$, '%[mfa]%', 'MFA: granting a permission needs a fresh check');
+select tst.fails_like($$update public.modules set enabled = not enabled where key = 'tenders'$$, '%[mfa]%', 'MFA: switching a module needs a fresh check');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.works($$update public.profiles set role_id = (select id from public.roles where key='hr_head') where email='alice@t.test'$$, 'MFA: with a fresh check the role change works');
+select tst.works($$update public.profiles set role_id = (select id from public.roles where key='staff_basic') where email='alice@t.test'$$, 'MFA: ... and can be put back');
+select tst.works($$update public.roles set description = 'Staff (basic)' where key='staff_basic'$$, 'MFA: with a fresh check a role can be edited');
+select tst.works($$update public.modules set enabled = not enabled where key = 'tenders'$$, 'MFA: with a fresh check a module can be switched');
+select tst.works($$update public.modules set enabled = not enabled where key = 'tenders'$$, 'MFA: ... and back');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000001');
+select tst.affects($$update public.profiles set role_id = (select id from public.roles where key='hr_head') where email='alice@t.test'$$, 0, 'MFA: a password-only Super Administrator cannot change roles at all');
+
+-- approving money
+select tst.admin();
+insert into tst_ids values ('mfa_exp', public.approval_submit('expense', gen_random_uuid(), 5000, null, 'b0000000-0000-0000-0000-000000000005', 'MFA expense', null, null));
+select tst.as_user_stale_mfa('b0000000-0000-0000-0000-000000000004');
+select tst.fails_like($$select public.decide_approval((select v from tst_ids where k='mfa_exp'), 'approved', null)$$, '%[mfa]%', 'MFA: approving an expense needs a fresh check');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='mfa_exp'), 'approved', null)) = 'approved', 'MFA: with a fresh check the approval goes through');
+-- low-risk approvals stay light: a basic-role manager decides leave on a password-only session
+select tst.admin();
+insert into tst_ids values ('mfa_leave', public.approval_submit('leave', gen_random_uuid(), 1,
+  (select id from public.employees where full_name='Alice Staff'), 'b0000000-0000-0000-0000-000000000002', 'Leave: Alice, 1 day', null, null));
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000008');
+select tst.ok((select public.decide_approval((select v from tst_ids where k='mfa_leave'), 'approved', null)) = 'approved', 'MFA: leave approvals do not need MFA');
+
+-- ---- C. the role flag ----------------------------------------------------------------------------------
+select tst.admin();
+select tst.ok((select require_mfa from public.roles where key='super_admin'), 'MFA: Super Administrator requires MFA');
+select tst.ok((select bool_and(require_mfa) from public.roles where key in ('hr_officer','payroll_officer','finance_manager','accountant','director')), 'MFA: HR and Finance roles require MFA by default');
+select tst.ok(not (select require_mfa from public.roles where key='staff_basic'), 'MFA: a new basic role does not');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.works($$update public.roles set require_mfa = true where key='staff_basic'$$, 'MFA: a Super Administrator can require MFA for a role');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000007');
+select tst.ok(not public.is_staff(), 'MFA: ... and then that role is locked until the second factor');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.works($$update public.roles set require_mfa = false where key='staff_basic'$$, 'MFA: ... and can switch it off again');
+select tst.works($$update public.roles set require_mfa = false where key='super_admin'$$, 'MFA: attempting to switch it off for Super Administrator is accepted but ignored');
+select tst.ok((select require_mfa from public.roles where key='super_admin'), 'MFA: ... the flag is still on for Super Administrator');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.affects($$update public.roles set require_mfa = false where key='hr_officer'$$, 0, 'MFA: an HR officer cannot change the flag');
+
+-- ---- D. the module list is staff-only ----------------------------------------------------------------
+select tst.anon();
+select tst.count_is($$select count(*) from public.modules$$, 0, 'anonymous visitors cannot see which modules are switched on');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.ok((select count(*) from public.modules) > 5, 'staff can see the module list');
+
+-- ---- E. restricted files need MFA ---------------------------------------------------------------------------
+select tst.admin();
+insert into public.restricted_documents(entity_type, entity_id, storage_path, file_name, mime_type, size_bytes)
+  values ('employee', (select id from public.employees where full_name='Bob Manager'), 'employee/202611/11111111-1111-1111-1111-111111111111-id.pdf', 'id.pdf', 'application/pdf', 100)
+  returning id \gset secdoc_
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000002');
+select tst.fails(format('select * from public.restricted_doc_open(%L)', :'secdoc_id'), 'MFA: opening an HR file on a password-only session is refused');
+select tst.as_user_stale_mfa('b0000000-0000-0000-0000-000000000002');
+select tst.ok((select count(*) from public.restricted_doc_open(:'secdoc_id')) = 1, 'MFA: an HR file opens in any MFA-verified session');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.fails(format('select * from public.restricted_doc_open(%L)', :'secdoc_id'), 'a basic employee cannot open HR files');
+
+-- ---- F. monitoring ---------------------------------------------------------------------------------------
+select tst.admin();
+select tst.works($$select public.security_log('login_failed', 'warning', null, '41.89.12.x', '{"reason":"bad_password"}')$$, 'monitoring: the server can record a security event');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from public.security_events$$, 0, 'monitoring: ordinary staff cannot read security events');
+select tst.fails($$insert into public.security_events(kind) values ('login_failed')$$, 'monitoring: browsers cannot write security events');
+select tst.fails($$select public.security_log('login_failed')$$, 'monitoring: browsers cannot call security_log');
+select tst.fails($$select public.security_posture()$$, 'monitoring: ordinary staff cannot run the posture check');
+select tst.as_user('b0000000-0000-0000-0000-000000000001');
+select tst.ok((select count(*) from public.security_events) >= 1, 'monitoring: the security team can read events');
+select tst.ok((select public.security_posture() ? 'issues'), 'monitoring: the posture check returns its findings');
+select tst.ok((select (public.security_posture() ->> 'mfa_missing_count')::int from (select 1) x) >= 1, 'monitoring: accounts without MFA are counted');
+select tst.ok((select public.security_posture() -> 'issues' @> '[{"key":"single_super"}]'), 'monitoring: a single Super Administrator is flagged');
+select tst.admin();
+insert into auth.mfa_factors(user_id, status) select p.id, 'verified' from public.profiles p join public.roles r on r.id = p.role_id where r.is_super or r.require_mfa;
+select tst.ok((select (public.security_posture_internal() ->> 'mfa_missing_count')::int) = 0, 'monitoring: once everyone has enrolled, none are missing');
+select tst.ok((select public.auto_security_checks('{}')) >= 1, 'monitoring: the daily check notifies the security team');
+select tst.ok((select public.auto_security_checks('{}')) = 0, 'monitoring: ... and does not repeat itself the same day');
+select tst.ok(exists(select 1 from public.notifications where rule_key = 'security_checks'), 'monitoring: the notification exists');
+
+-- ---- G. structural security properties (these catch regressions in future migrations) ----------------------------
+select tst.admin();
+select tst.count_is($$select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and not c.relrowsecurity and c.relname !~ '^(tst_|fin_ids|doc_ids)'$$, 0, 'structure: every table in the public schema has Row Level Security on');
+select tst.count_is($$select count(*) from information_schema.role_table_grants where grantee='anon' and table_schema='public' and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')$$, 0, 'structure: the anonymous role has no write grants');
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef and not exists (select 1 from unnest(coalesce(p.proconfig,'{}')) c where c like 'search_path=%')$$, 0, 'structure: every SECURITY DEFINER function pins its search_path');
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')
+   and p.proname not in ('can','can_read_private_docs','can_write_private_docs','has_permission','is_staff','is_super_admin','module_enabled','my_permissions')$$, 0, 'structure: anonymous visitors can execute no SECURITY DEFINER function beyond the permission helpers');
+select tst.count_is($$select count(*) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='v' and not coalesce(c.reloptions::text,'') like '%security_invoker=true%'$$, 0, 'structure: every view runs with the caller''s permissions');
+select tst.count_is($$select count(*) from storage.buckets where public and id <> 'public-media'$$, 0, 'structure: only public-media is a public bucket');
+select tst.count_is($$select count(*) from storage.buckets where id in ('private-docs','restricted-docs') and not public$$, 2, 'structure: both document buckets exist and are private');
+select tst.count_is($$select count(*) from pg_policies where schemaname in ('public','storage') and (qual = 'true' or with_check = 'true') and 'anon' = any(roles) and cmd <> 'SELECT'$$, 0, 'structure: no policy lets anonymous visitors write');
+select tst.count_is($$select count(*) from pg_policies where schemaname='public' and 'anon' = any(roles)$$, 20, 'structure: exactly the known public-content tables are readable by anonymous visitors');
+
+-- ---- H. storage policies ------------------------------------------------------------------------------------------
+select tst.anon();
+select tst.fails($$insert into storage.objects(bucket_id,name) values ('restricted-docs','employee/202611/x.pdf')$$, 'storage: anonymous visitors cannot upload to restricted-docs');
+select tst.fails($$insert into storage.objects(bucket_id,name) values ('private-docs','a.pdf')$$, 'storage: ... nor to private-docs');
+select tst.fails($$insert into storage.objects(bucket_id,name) values ('public-media','a.png')$$, 'storage: ... nor to public-media');
+select tst.count_is($$select count(*) from storage.objects where bucket_id in ('restricted-docs','private-docs')$$, 0, 'storage: anonymous visitors cannot list private files');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.fails($$insert into storage.objects(bucket_id,name,owner) values ('restricted-docs','employee/202611/a.pdf', auth.uid())$$, 'storage: a basic employee cannot upload HR files');
+select tst.fails($$insert into storage.objects(bucket_id,name,owner) values ('public-media','a.png', auth.uid())$$, 'storage: ... nor change the public media library');
+select tst.as_user_aal1('b0000000-0000-0000-0000-000000000002');
+select tst.fails($$insert into storage.objects(bucket_id,name,owner) values ('restricted-docs','employee/202611/a.pdf', auth.uid())$$, 'storage: an HR officer on a password-only session cannot upload');
+select tst.as_user('b0000000-0000-0000-0000-000000000002');
+select tst.works($$insert into storage.objects(bucket_id,name,owner) values ('restricted-docs','employee/202611/22222222-2222-2222-2222-222222222222-a.pdf', auth.uid())$$, 'storage: an HR officer with MFA can upload an employee file');
+select tst.fails($$insert into storage.objects(bucket_id,name,owner) values ('restricted-docs','invoice/202611/33333333-3333-3333-3333-333333333333-a.pdf', auth.uid())$$, 'storage: ... but not into the Finance folders');
+select tst.fails($$insert into storage.objects(bucket_id,name,owner) values ('restricted-docs','unknown/202611/44444444-4444-4444-4444-444444444444-a.pdf', auth.uid())$$, 'storage: ... nor into an unknown folder');
+select tst.ok((select count(*) from storage.objects where bucket_id='restricted-docs' and name like 'employee/202611/2222%') = 1, 'storage: ... and can read the file');
+select tst.as_user('b0000000-0000-0000-0000-000000000004');
+select tst.count_is($$select count(*) from storage.objects where bucket_id='restricted-docs' and name like 'employee/%'$$, 0, 'storage: a finance manager cannot read HR files');
+select tst.as_user('b0000000-0000-0000-0000-000000000007');
+select tst.count_is($$select count(*) from storage.objects where bucket_id='restricted-docs' and name like 'employee/%'$$, 0, 'storage: a basic employee cannot read HR files');
+select tst.admin();
+delete from storage.objects where bucket_id = 'restricted-docs' and name like 'employee/202611/2222%';
 
 -- ---------------- report ----------------
 select tst.admin();

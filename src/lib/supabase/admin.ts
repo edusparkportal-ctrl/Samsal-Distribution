@@ -13,6 +13,8 @@ import { requirePublicEnv } from "./env";
  *      3. the automation dispatcher (src/lib/automation/dispatch.ts), which sends queued emails and
  *         runs the scheduler tick. It is only reachable with the CRON_SECRET or by a signed-in
  *         administrator holding automation.manage.
+ *      4. security monitoring: recording security events (lib/security/events.ts) and a Super Administrator
+ *         resetting another person's authenticator (settings/users/actions.ts).
  *    Everything else must use createSupabaseServerClient() so RLS applies.
  *  - Callers must do their own permission check BEFORE using it.
  */
