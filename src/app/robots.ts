@@ -5,7 +5,7 @@ import { absoluteUrl, site } from "@/config/site";
 // (site.legal.reviewed in src/config/site.ts).
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [{ userAgent: "*", allow: "/", disallow: ["/api/", ...(site.legal.reviewed ? [] : ["/legal/"])] }],
+    rules: [{ userAgent: "*", allow: "/", disallow: ["/api/", "/portal/", ...(site.legal.reviewed ? [] : ["/legal/"])] }],
     sitemap: absoluteUrl("/sitemap.xml"),
   };
 }

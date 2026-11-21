@@ -82,3 +82,8 @@ Sensitive tables have RLS on and no anon access; every read is gated by `public.
 5. Optionally deploy with `CSP_REPORT_ONLY=1` first, watch `/api/csp-report` logs, then remove it.
 6. After deploy: sign in, enrol MFA, open Admin > Security, run the `Security monitor` workflow manually.
 7. Run `npm install` locally and commit `package-lock.json`.
+
+## Customer portal release
+
+See `docs/PORTAL.md`. The portal module ships OFF; deploying the code changes nothing for existing users. Apply migration
+`20261120100000_customer_portal` with the normal pipeline, then follow "Turning it on" in that document.

@@ -291,7 +291,7 @@ create or replace function public.portal_catalog(
   p_search text default null, p_category uuid default null, p_slug text default null, p_limit integer default 48, p_offset integer default 0
 ) returns table (
   product_id uuid, slug text, name text, summary text, description text, category_id uuid, category_name text, packaging text, unit text,
-  photo_media_id uuid, fallback_image text, image_alt text,
+  photo_path text, fallback_image text, image_alt text,
   unit_price numeric, list_price numeric, special boolean, currency text, min_order_qty numeric, qty_step numeric, orderable boolean, availability text, total_count bigint
 ) language plpgsql stable security definer set search_path = public as $$
 declare cid uuid := public.portal_customer_id(); q text; lim integer := least(greatest(coalesce(p_limit, 48), 1), 200); off integer := greatest(coalesce(p_offset, 0), 0);
@@ -301,7 +301,7 @@ begin
   if q is not null then q := '%' || replace(replace(replace(left(q, 80), '\', '\\'), '%', '\%'), '_', '\_') || '%'; end if;
   return query
   select p.id, p.slug, p.name, p.summary, p.description, p.category_id, c.name, p.packaging, u.abbreviation,
-         p.photo_media_id, p.fallback_image, p.image_alt,
+         (select ma.storage_path from public.media_assets ma where ma.id = p.photo_media_id and ma.bucket = 'public-media'), p.fallback_image, p.image_alt,
          pi.effective, pi.list, coalesce(pi.special, false), coalesce(pi.currency, 'KES'), pi.min_qty, pi.step,
          coalesce(pi.orderable, false) and pi.effective is not null,
          si.status,
@@ -390,14 +390,15 @@ grant execute on function public.portal_cart_clear() to authenticated;
 -- The cart with today's prices and a plain-language issue per line. Totals are exclusive of VAT.
 create or replace function public.portal_cart()
 returns table (
-  product_id uuid, slug text, name text, packaging text, unit text, fallback_image text, photo_media_id uuid, image_alt text,
+  product_id uuid, slug text, name text, packaging text, unit text, fallback_image text, photo_path text, image_alt text,
   quantity numeric, unit_price numeric, line_total numeric, currency text, min_order_qty numeric, qty_step numeric, availability text, issue text
 ) language plpgsql stable security definer set search_path = public as $$
 declare cid uuid := public.portal_customer_id();
 begin
   if cid is null then return; end if;
   return query
-  select p.id, p.slug, p.name, p.packaging, u.abbreviation, p.fallback_image, p.photo_media_id, p.image_alt,
+  select p.id, p.slug, p.name, p.packaging, u.abbreviation, p.fallback_image,
+         (select ma.storage_path from public.media_assets ma where ma.id = p.photo_media_id and ma.bucket = 'public-media'), p.image_alt,
          ci.quantity, pi.effective, round(ci.quantity * pi.effective, 2), coalesce(pi.currency, 'KES'), pi.min_qty, pi.step, si.status,
          case
            when p.status <> 'published' or p.deleted_at is not null then 'unavailable'

@@ -17,7 +17,8 @@
     "test:security": "tsx tests/security.test.ts",
     "security:audit": "node scripts/security-audit.mjs",
     "security:deps": "npm audit --omit=dev --audit-level=high",
-    "check": "npm run typecheck && npm run security:audit && npm run test:security"
+    "check": "npm run typecheck && npm run security:audit && npm run test:security && npm run test:portal",
+    "test:portal": "tsx tests/portal.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

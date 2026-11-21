@@ -38,10 +38,13 @@ const read = (p) => readFileSync(p, "utf8");
 const src = walk(join(root, "src")).filter((f) => /\.(ts|tsx|mjs)$/.test(f));
 
 // ---- R1: server actions ------------------------------------------------------------------
-const GUARDS = /\b(requireStaff|requirePermission|requireStepUp|checkPermission|checkStepUp|getSession|signedInUser)\s*\(/;
+const GUARDS = /\b(requireStaff|requirePermission|requireStepUp|checkPermission|checkStepUp|getSession|signedInUser|requireCustomer)\s*\(/;
 // Public by design: they authenticate the person (or are the sign-in flow itself).
 const PUBLIC_ACTIONS = new Set(["src/app/admin/login/actions.ts:signIn", "src/app/admin/login/actions.ts:requestPasswordReset", "src/app/admin/login/actions.ts:signOut",
-  "src/app/admin/forgot-password/actions.ts:requestPasswordReset"]);
+  "src/app/admin/forgot-password/actions.ts:requestPasswordReset",
+  // Customer portal sign-in flow: authenticate the person, rate limited. setPortalPassword verifies the session user itself.
+  "src/app/portal/(auth)/actions.ts:portalSignIn", "src/app/portal/(auth)/actions.ts:registerCustomer", "src/app/portal/(auth)/actions.ts:requestPortalReset",
+  "src/app/portal/(auth)/actions.ts:setPortalPassword", "src/app/portal/(auth)/actions.ts:portalSignOut"]);
 let actionCount = 0;
 for (const f of src) {
   const text = read(f);
@@ -85,7 +88,8 @@ notes.push(`R2 ${routeCount} route handlers checked`);
 // ---- R3: service-role client ----------------------------------------------------------------
 const SERVICE_OK = new Set(["src/lib/security/env.ts", // reports only whether the key exists
   "src/lib/supabase/admin.ts", "src/lib/supabase/public.ts", "src/lib/enquiries.ts", "src/lib/automation/dispatch.ts", "src/lib/security/events.ts",
-  "src/app/admin/(panel)/settings/users/actions.ts"]);
+  "src/app/admin/(panel)/settings/users/actions.ts",
+  "src/app/portal/(auth)/actions.ts"]); // portal registration sends the invitation; CAPTCHA + closed rate limits
 for (const f of src) {
   const text = read(f).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
   if (/createServiceClient\s*\(|process\.env\.SUPABASE_SERVICE_ROLE_KEY/.test(text) && !SERVICE_OK.has(rel(f))) fail("R3", rel(f), "uses the service-role client or key; it bypasses Row Level Security. Review, then add to SERVICE_OK");
@@ -119,7 +123,7 @@ for (const f of src) {
 // ---- R7: redirects ---------------------------------------------------------------------------------
 for (const f of src) {
   const t = read(f);
-  if (/(get\(\s*["']next["']\s*\)|\bsp\.next\b|\.next\b\s*\?\?)/.test(t) && /redirect\s*\(/.test(t) && !/safeNext/.test(t)) fail("R7", rel(f), 'reads a "next" target and redirects without safeNext()');
+  if (/(get\(\s*["']next["']\s*\)|\bsp\.next\b|\.next\b\s*\?\?)/.test(t) && /redirect\s*\(/.test(t) && !/safeNext|safePortalNext/.test(t)) fail("R7", rel(f), 'reads a "next" target and redirects without safeNext()');
 }
 
 // ---- R8: secrets in tracked files -----------------------------------------------------------------
@@ -172,6 +176,28 @@ mustContain("src/lib/form-token.ts", /unconfigured/, "form token no longer fails
 mustContain("src/lib/rate-limit.ts", /store_missing/, "rate limiter no longer fails closed without a store");
 mustContain("src/app/api/quote/route.ts", /missingPublicFormControls/, "quote route no longer refuses submissions when controls are missing");
 mustContain("src/lib/auth/session.ts", /my_mfa_required/, "session gate no longer checks MFA");
+
+mustContain("src/middleware.ts", /\/portal\/:path\*/, "the customer portal is not covered by the middleware (session refresh, nonce CSP, sign-in redirect)");
+mustContain("next.config.mjs", /\(\?!admin\|portal\)/, "the portal would get the static public CSP instead of the nonce CSP");
+
+// ---- R11: customer portal reads data only through the portal_* database functions ---------------------------------
+// Customers hold no table rights. The one table a portal file may read directly is the caller's own application row.
+let portalFiles = 0;
+for (const f of src) {
+  const r = rel(f);
+  if (!/^src\/(app\/portal|components\/portal|lib\/portal)\//.test(r)) continue;
+  portalFiles++;
+  const text = read(f).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+  for (const m of text.matchAll(/\.from\(\s*["'`]([a-z_]+)["'`]/g)) {
+    const allowed = m[1] === "customer_accounts" || (m[1] === "modules" && r === "src/app/portal/(auth)/actions.ts"); // registration checks the module switch
+    if (!allowed) fail("R11", r, `portal code reads table "${m[1]}" directly; use a portal_* function so ownership is enforced in the database`);
+  }
+  for (const m of text.matchAll(/\.rpc\(\s*["'`]([a-z_]+)["'`]/g)) {
+    if (!m[1].startsWith("portal_")) fail("R11", r, `portal code calls "${m[1]}"; only portal_* functions are allowed`);
+  }
+  if (/createServiceClient|SUPABASE_SERVICE_ROLE_KEY/.test(text) && r !== "src/app/portal/(auth)/actions.ts") fail("R11", r, "portal code uses the service-role client");
+}
+notes.push(`R11 ${portalFiles} portal files checked`);
 
 for (const n of notes) console.log(`  ${n}`);
 if (failures.length) {

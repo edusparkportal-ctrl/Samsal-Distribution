@@ -17,7 +17,7 @@ import type { Permission } from "@/lib/auth/permissions";
 
 export type ModuleKey =
   | "website" | "crm" | "quotations" | "suppliers" | "procurement"
-  | "inventory" | "orders" | "tenders" | "hr" | "people" | "finance" | "approvals" | "automation" | "reports" | "audit";
+  | "inventory" | "orders" | "portal" | "tenders" | "hr" | "people" | "finance" | "approvals" | "automation" | "reports" | "audit";
 
 export type NavIcon =
   | "globe" | "building" | "users" | "share" | "home" | "package" | "tag" | "wrench" | "factory" | "image" | "search" | "megaphone" | "file"
@@ -93,6 +93,17 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     items: [
       { label: "Sales orders", href: "/admin/orders/sales-orders", permission: "orders.view" },
       { label: "Deliveries", href: "/admin/orders/deliveries", permission: "orders.view" },
+    ],
+  },
+  {
+    key: "portal",
+    label: "Customer portal",
+    icon: "users",
+    items: [
+      { label: "Accounts", href: "/admin/portal/accounts", permission: "portal.view" },
+      { label: "List prices", href: "/admin/portal/prices", permission: "portal.view" },
+      { label: "Customer prices", href: "/admin/portal/customer-prices", permission: "portal.view" },
+      { label: "Tracking updates", href: "/admin/portal/updates", permission: "portal.view" },
     ],
   },
   {
@@ -183,7 +194,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
  */
 export type DepartmentDef = { key: string; label: string; icon: NavIcon; modules: ModuleKey[] };
 export const DEPARTMENTS: DepartmentDef[] = [
-  { key: "sales", label: "Sales & Customers", icon: "inbox", modules: ["crm", "quotations", "orders"] },
+  { key: "sales", label: "Sales & Customers", icon: "inbox", modules: ["crm", "quotations", "orders", "portal"] },
   { key: "supply", label: "Procurement & Supply", icon: "truck", modules: ["suppliers", "procurement", "inventory", "tenders"] },
   { key: "people", label: "Human Resources", icon: "userplus", modules: ["people", "hr"] },
   { key: "finance", label: "Finance", icon: "wallet", modules: ["finance"] },

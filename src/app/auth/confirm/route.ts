@@ -2,7 +2,7 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { safeNext } from "@/lib/auth/safe-redirect";
+import { safeNext, safePortalNext } from "@/lib/auth/safe-redirect";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/security/request";
 import { logSecurityEvent } from "@/lib/security/events";
@@ -19,8 +19,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
-  const next = safeNext(searchParams.get("next"), "/admin/account");
-  const fail = NextResponse.redirect(new URL("/admin/login?error=link", request.url));
+  // Links sent to customers carry next=/portal/...; staff links carry next=/admin/...
+  const wantsPortal = (searchParams.get("next") ?? "").startsWith("/portal");
+  const next = wantsPortal ? safePortalNext(searchParams.get("next"), "/portal/status") : safeNext(searchParams.get("next"), "/admin/account");
+  const fail = NextResponse.redirect(new URL(wantsPortal ? "/portal/login?error=link" : "/admin/login?error=link", request.url));
 
   if (!isSupabaseConfigured() || !tokenHash || !type || !ALLOWED_TYPES.includes(type) || tokenHash.length > 200) return fail;
   const ip = clientIp(request.headers);
@@ -35,7 +37,17 @@ export async function GET(request: NextRequest) {
     await logSecurityEvent("login_failed", { severity: "info", ip, detail: { reason: "bad_link", type } });
     return fail;
   }
-  const res = NextResponse.redirect(new URL(next, request.url));
+  // The email templates carry no "next". A customer (someone with a portal application) goes to choose a password
+  // in the portal; staff keep their existing destination.
+  let dest = next;
+  if (!searchParams.get("next")) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: acc } = await supabase.from("customer_accounts").select("user_id").eq("user_id", user.id).maybeSingle();
+      if (acc) dest = "/portal/set-password";
+    }
+  }
+  const res = NextResponse.redirect(new URL(dest, request.url));
   res.headers.set("Cache-Control", "private, no-store");
   return res;
 }

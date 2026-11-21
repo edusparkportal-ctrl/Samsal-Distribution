@@ -44,7 +44,7 @@ export type ResourceDef = {
   description: string;
   permission: Permission;
   module?: ModuleKey;
-  pk: "id" | "path" | "employee_id";
+  pk: "id" | "path" | "employee_id" | "product_id";
   singleton?: boolean;
   fields: Field[];
   columns: { key: string; label: string; badge?: Record<string, "teal" | "grey" | "amber" | "green" | "red">; lookup?: { table: string; labelCol: string } }[];

@@ -29,6 +29,7 @@ jobs:
       - run: npm ci || npm install --no-audit --no-fund
       - run: npm run security:audit
       - run: npm run test:security
+      - run: npm run test:portal
       - run: npm run typecheck
       - name: Secret scan (patterns only, never prints values)
         run: |

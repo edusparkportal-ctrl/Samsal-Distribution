@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 import { buildCsp, cspHeaderName, newNonce } from "@/lib/security/csp.mjs";
 
 /**
- * Gatekeeper for /admin. This is a FIRST line of defence only (it redirects anonymous visitors);
+ * Gatekeeper for /admin and /portal. This is a FIRST line of defence only (it redirects anonymous visitors);
  * every admin page and server action re-checks the user's permissions on the server, and the
  * database enforces them again with Row Level Security (including multi-factor assurance).
  *
@@ -11,6 +11,8 @@ import { buildCsp, cspHeaderName, newNonce } from "@/lib/security/csp.mjs";
  * is trusted there. (Set CSP_REPORT_ONLY=1 in Vercel to observe violations without blocking.)
  */
 const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/forgot-password"];
+// The customer portal is a separate area with its own sign-in. Customers never use /admin.
+const PUBLIC_PORTAL_PATHS = ["/portal/login", "/portal/register", "/portal/forgot-password"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -27,26 +29,29 @@ export async function middleware(request: NextRequest) {
   const { response, user, configured } = await updateSession(request, requestHeaders);
 
   response.headers.set(cspHeaderName(reportOnly), csp);
-  // Never let search engines or caches keep admin pages.
+  // Never let search engines or caches keep admin or portal pages.
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   response.headers.set("Cache-Control", "private, no-store");
 
+  const portal = pathname === "/portal" || pathname.startsWith("/portal/");
+  const loginPath = portal ? "/portal/login" : "/admin/login";
+
   if (!configured) {
-    // Supabase not set up yet: the admin area simply is not available.
-    if (pathname !== "/admin/login") return NextResponse.redirect(new URL("/admin/login", request.url));
+    // Supabase not set up yet: these areas simply are not available.
+    if (pathname !== loginPath) return NextResponse.redirect(new URL(loginPath, request.url));
     return response;
   }
 
-  const isPublic = PUBLIC_ADMIN_PATHS.includes(pathname);
+  const isPublic = portal ? PUBLIC_PORTAL_PATHS.includes(pathname) : PUBLIC_ADMIN_PATHS.includes(pathname);
   if (!user && !isPublic) {
-    const url = new URL("/admin/login", request.url);
-    if (pathname !== "/admin") url.searchParams.set("next", pathname);
+    const url = new URL(loginPath, request.url);
+    if (pathname !== "/admin" && pathname !== "/portal") url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
   return response;
 }
 
 export const config = {
-  // Only the admin area; the public website never touches auth cookies (keeps pages cacheable).
-  matcher: ["/admin/:path*"],
+  // Only the admin area and the customer portal; the public website never touches auth cookies (keeps pages cacheable).
+  matcher: ["/admin/:path*", "/portal/:path*"],
 };

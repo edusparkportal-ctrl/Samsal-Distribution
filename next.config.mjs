@@ -41,8 +41,8 @@ const nextConfig = {
     return [
       // Security headers on every response, including /admin and the API.
       { source: "/:path*", headers: baseSecurityHeaders() },
-      // The public site gets the static policy. /admin gets a stricter, nonce-based one from src/middleware.ts.
-      { source: "/((?!admin).*)", headers: [{ key: cspHeaderName(reportOnly), value: csp }] },
+      // The public site gets the static policy. /admin and /portal get a stricter, nonce-based one from src/middleware.ts.
+      { source: "/((?!admin|portal).*)", headers: [{ key: cspHeaderName(reportOnly), value: csp }] },
     ];
   },
 };

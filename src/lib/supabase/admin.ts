@@ -15,6 +15,8 @@ import { requirePublicEnv } from "./env";
  *         administrator holding automation.manage.
  *      4. security monitoring: recording security events (lib/security/events.ts) and a Super Administrator
  *         resetting another person's authenticator (settings/users/actions.ts).
+ *      5. customer portal registration: sending the invitation email and checking that the portal is open
+ *         (app/portal/(auth)/actions.ts). Protected by CAPTCHA and rate limits that fail closed.
  *    Everything else must use createSupabaseServerClient() so RLS applies.
  *  - Callers must do their own permission check BEFORE using it.
  */
