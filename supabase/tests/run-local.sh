@@ -13,5 +13,8 @@ echo "$RLS_OUT" | grep -E "^ *[0-9]+ *\| *[0-9]+ *$|passed|FAIL" || true
 echo "== migrations + HR/Finance/approvals suite"; reset
 PF_OUT=$($P -f supabase/tests/people_finance.test.sql 2>&1) || { echo "$PF_OUT" | grep -E "ERROR|FAIL|TESTS FAILED"; echo "PEOPLE/FINANCE SUITE FAILED"; exit 1; }
 echo "$PF_OUT" | grep -E "^ *[0-9]+ *\| *[0-9]+ *$|passed|FAIL" || true
+echo "== migrations + customer portal suite"; reset
+PT_OUT=$($P -f supabase/tests/portal.test.sql 2>&1) || { echo "$PT_OUT" | grep -E "ERROR|FAIL|TESTS FAILED"; echo "PORTAL SUITE FAILED"; exit 1; }
+echo "$PT_OUT" | grep -E "^ *[0-9]+ *\| *[0-9]+ *$|passed|FAIL" || true
 echo "== migrations + seed (twice) + seed tests"; reset; $P -f supabase/seed.sql; $P -f supabase/seed.sql; $P -f supabase/tests/seed.test.sql
 echo "ALL DATABASE TESTS PASSED"
