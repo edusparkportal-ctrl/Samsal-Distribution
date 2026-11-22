@@ -17,8 +17,8 @@ jobs:
     name: Static audit, unit tests, types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 20 }
       - name: Lockfile policy
         run: |
@@ -43,8 +43,8 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 20 }
       - run: npm install --no-audit --no-fund --package-lock-only
       - name: npm audit (production dependencies, high and above)
@@ -60,7 +60,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: RLS, MFA, structural and storage tests
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
