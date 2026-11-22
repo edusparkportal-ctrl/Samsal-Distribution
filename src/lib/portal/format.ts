@@ -44,6 +44,33 @@ export const orderStatus = (s: string) => ORDER_STATUS[s] ?? { label: s, tone: "
 /** The five milestones shown on the tracking page. */
 export const TRACK_STEPS = ["Received", "Confirmed", "Being prepared", "Delivering", "Delivered"] as const;
 
+export const INVOICE_STATUS: Record<string, { label: string; tone: Tone }> = {
+  issued: { label: "Unpaid", tone: "amber" },
+  partially_paid: { label: "Part paid", tone: "teal" },
+  paid: { label: "Paid", tone: "green" },
+};
+/** Overdue is shown instead of "Unpaid" / "Part paid" when the due date has passed. */
+export const invoiceStatus = (status: string, overdue = false): { label: string; tone: Tone } =>
+  overdue && status !== "paid" ? { label: "Overdue", tone: "red" } : INVOICE_STATUS[status] ?? { label: status, tone: "grey" };
+
+export const QUOTE_STATUS: Record<string, { label: string; tone: Tone }> = {
+  sent: { label: "Awaiting your answer", tone: "amber" },
+  accepted: { label: "Accepted", tone: "green" },
+  declined: { label: "Declined", tone: "grey" },
+  expired: { label: "Expired", tone: "grey" },
+};
+export const quoteStatus = (s: string) => QUOTE_STATUS[s] ?? { label: s, tone: "grey" as Tone };
+
+export const PAY_METHOD: Record<string, string> = { mpesa: "M-Pesa", bank: "Bank transfer", cash: "Cash", cheque: "Cheque", other: "Other" };
+export const payMethod = (m: string) => PAY_METHOD[m] ?? m;
+
+/** Whole shillings from user input (M-Pesa takes no cents), else null. */
+export function parseShillings(v: FormDataEntryValue | null | undefined): number | null {
+  if (typeof v !== "string") return null;
+  const n = Number(v.replace(/[,\s]/g, ""));
+  return Number.isFinite(n) && n >= 1 && n <= 250_000 ? Math.round(n) : null;
+}
+
 export const AVAILABILITY: Record<string, { label: string; tone: Tone }> = {
   in_stock: { label: "In stock", tone: "green" },
   low_stock: { label: "Low stock", tone: "amber" },

@@ -299,4 +299,16 @@ export const OPS_RESOURCES: Record<string, ResourceDef> = {
       { type: "checkbox", name: "customer_visible", label: "Show this to the customer", default: true },
     ],
   },
+  portal_payment_settings: {
+    key: "portal_payment_settings", base: "/admin/portal", route: "payment-settings", table: "portal_payment_settings", label: "Payment settings", singular: "Payment settings", pk: "id", singleton: true,
+    description: "What customers are told about paying invoices. Changing these needs a fresh authenticator code, because they decide where customers send money. Online M-Pesa also needs the Daraja keys set on the server; until then the switch has no effect on what customers can do.",
+    permission: "portal.manage", viewPermission: "portal.view", module: "portal", publicSite: false, columns: [], orderBy: "id",
+    fields: [
+      { type: "checkbox", name: "mpesa_enabled", label: "Let customers pay invoices with M-Pesa online (STK Push)", default: false, section: "M-Pesa" },
+      { type: "select", name: "mpesa_kind", label: "Our M-Pesa account type", required: true, options: [{ value: "paybill", label: "Paybill" }, { value: "till", label: "Buy Goods (Till)" }] },
+      { type: "text", name: "mpesa_number", label: "Paybill or Till number", max: 10, placeholder: "e.g. 123456", help: "Shown to customers as a manual way to pay. Digits only." },
+      { type: "textarea", name: "bank_instructions", label: "Bank transfer instructions", max: 1000, rows: 4, section: "Other ways to pay", help: "Bank, account name and number, branch. Double-check every digit." },
+      { type: "textarea", name: "payment_note", label: "Note on every invoice", max: 500, rows: 2, help: "For example: payment terms or a reminder to quote the invoice number." },
+    ],
+  },
 };

@@ -324,6 +324,194 @@ select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='publi
 select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.proname like 'portal\_%' and p.prosecdef and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')$$, 0, 'structure: every portal function pins its search_path');
 select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('portal_price_info','portal_stock_info','portal_create_order','portal_require') and has_function_privilege('authenticated', p.oid, 'execute')$$, 0, 'structure: internal portal helpers are not callable by customers');
 
+-- =====================================================================
+-- PHASE 2: invoices, payments, M-Pesa, quotations
+-- =====================================================================
+select tst.admin();
+insert into public.invoices(id, number, customer_id, status, due_date, tax_rate) values
+ ('b1000000-0000-0000-0000-000000000001','INV-T-1','d0000000-0000-0000-0000-00000000000a','draft', current_date + 10, 16),
+ ('b1000000-0000-0000-0000-000000000002','INV-T-2','d0000000-0000-0000-0000-00000000000a','draft', current_date - 5, 0),
+ ('b1000000-0000-0000-0000-000000000003','INV-T-3','d0000000-0000-0000-0000-00000000000b','draft', current_date + 10, 0),
+ ('b1000000-0000-0000-0000-000000000004','INV-T-4','d0000000-0000-0000-0000-00000000000a','draft', current_date + 10, 0),
+ ('b1000000-0000-0000-0000-000000000005','INV-T-5','d0000000-0000-0000-0000-00000000000a','draft', current_date + 10, 0);
+insert into public.invoice_items(invoice_id, line_no, description, quantity, unit_price) values
+ ('b1000000-0000-0000-0000-000000000001',1,'Rice 50kg',10,1000),
+ ('b1000000-0000-0000-0000-000000000002',1,'Sugar',4,500),
+ ('b1000000-0000-0000-0000-000000000003',1,'Flour',1,900),
+ ('b1000000-0000-0000-0000-000000000004',1,'Oil',1,300),
+ ('b1000000-0000-0000-0000-000000000005',1,'Salt',1,100);
+update public.invoices set status='issued', issue_date=current_date where id in
+ ('b1000000-0000-0000-0000-000000000001','b1000000-0000-0000-0000-000000000002','b1000000-0000-0000-0000-000000000003');
+update public.invoices set status='void' where id='b1000000-0000-0000-0000-000000000005';
+update public.portal_payment_settings set mpesa_enabled=false, mpesa_number='123456', bank_instructions='Pay to Samsal, A/C 000';
+
+-- invoice visibility
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.count_is($$select count(*) from public.portal_invoices()$$, 2, 'invoices: a customer sees only their own issued invoices (drafts and voids hidden)');
+select tst.count_is($$select count(*) from public.portal_invoices('overdue')$$, 1, 'invoices: the overdue filter works');
+select tst.ok((select (public.portal_invoice('b1000000-0000-0000-0000-000000000001') ->> 'total')::numeric = 11600), 'invoices: total includes tax (10,000 + 16%)');
+select tst.ok(public.portal_invoice('b1000000-0000-0000-0000-000000000003') is null, 'invoices: another customer''s invoice cannot be opened');
+select tst.ok(public.portal_invoice('b1000000-0000-0000-0000-000000000004') is null, 'invoices: a draft invoice cannot be opened');
+select tst.count_is($$select count(*) from public.invoices$$, 0, 'invoices: no direct table access (row security hides every row)');
+select tst.count_is($$select count(*) from public.mpesa_payments$$, 0, 'mpesa: no direct table access');
+select tst.count_is($$select count(*) from public.portal_payment_settings$$, 0, 'settings: invisible to customers');
+select tst.ok((select (public.portal_dashboard() ->> 'outstanding')::numeric = 11600 + 2000 and (public.portal_dashboard() ->> 'overdue_count')::int = 1), 'dashboard: outstanding balance and overdue count');
+select tst.ok((select public.portal_pay_info() ->> 'bank_instructions' = 'Pay to Samsal, A/C 000' and (public.portal_pay_info() ->> 'mpesa_online')::boolean = false), 'pay info: customers see the instructions');
+select tst.as_user('c0000000-0000-0000-0000-00000000000e');
+select tst.count_is($$select count(*) from public.portal_invoices()$$, 0, 'invoices: someone without an active account sees nothing');
+select tst.ok(public.portal_pay_info() is null, 'pay info: someone without an active account gets nothing');
+select tst.as_user('c0000000-0000-0000-0000-00000000000d');
+select tst.count_is($$select count(*) from public.portal_invoices()$$, 0, 'invoices: a suspended account sees nothing');
+
+-- M-Pesa disabled
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','0712345678',1000)$$, '%not available%', 'mpesa: refused while the module setting is off');
+select tst.admin();
+update public.portal_payment_settings set mpesa_enabled=true;
+
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok(public.portal_normalise_phone('0712 345 678')='254712345678' and public.portal_normalise_phone('+254112345678')='254112345678' and public.portal_normalise_phone('712345678')='254712345678' and public.portal_normalise_phone('0612345678') is null and public.portal_normalise_phone('abc') is null, 'mpesa: phone numbers are normalised and validated');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000003','0712345678',500)$$, '%cannot be paid online%', 'mpesa: cannot pay another customer''s invoice');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000004','0712345678',100)$$, '%cannot be paid online%', 'mpesa: cannot pay a draft invoice');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','12345',500)$$, '%Safaricom number%', 'mpesa: bad phone number refused');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','0712345678',0)$$, '%amount%', 'mpesa: zero amount refused');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','0712345678',99999)$$, '%more than the balance%', 'mpesa: amount above the balance refused');
+create temp table _m (id uuid);
+grant all on _m to public;
+select tst.works($$insert into _m select (public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','0712345678',5000) ->> 'id')::uuid$$, 'mpesa: a valid request is prepared');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','0712345678',100)$$, '%already in progress%', 'mpesa: no second request while one is in flight');
+select tst.ok((select public.portal_mpesa_status((select id from _m)) ->> 'status' = 'created'), 'mpesa: the customer can poll their request');
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.ok(public.portal_mpesa_status((select id from _m)) is null, 'mpesa: another customer cannot poll it');
+
+-- customers cannot run the server-side functions
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.fails($$select public.mpesa_complete('x', 0, 'ok', 'QWE12RTY34', 5000, '254712345678')$$, 'mpesa: a customer cannot mark a payment as paid');
+select tst.fails($$select public.mpesa_attach_request((select id from _m), 'm', 'c')$$, 'mpesa: a customer cannot attach a request');
+select tst.admin();
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('mpesa_attach_request','mpesa_fail_request','mpesa_complete') and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))$$, 0, 'mpesa: server-only functions are closed to customers and visitors');
+
+-- server flow
+select public.mpesa_attach_request((select id from _m), 'MR-1', 'ws_CO_1');
+select tst.ok((select status='pending' from public.mpesa_payments where checkout_request_id='ws_CO_1'), 'mpesa: request is pending after Safaricom accepts it');
+select tst.ok(public.mpesa_complete('ws_CO_1', 0, 'ok', 'QWE12RTY34', 4000, '254712345678') = 'needs_review', 'mpesa: a different amount is held for review, not applied');
+select tst.count_is($$select count(*) from public.invoice_payments where invoice_id='b1000000-0000-0000-0000-000000000001'$$, 0, 'mpesa: nothing was credited on a mismatch');
+
+-- a clean success on a new request
+update public.mpesa_payments set created_at = now() - interval '1 hour';
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.works($$insert into _m select (public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000001','254712345678',5000) ->> 'id')::uuid$$, 'mpesa: second request prepared');
+select tst.admin();
+select public.mpesa_attach_request((select id from _m order by ctid desc limit 1), 'MR-2', 'ws_CO_2');
+select tst.ok(public.mpesa_complete('ws_CO_2', 0, 'ok', 'RCT11AAAA1', 5000, '254712345678') = 'succeeded', 'mpesa: success is applied');
+select tst.ok((select status='partially_paid' from public.invoices where id='b1000000-0000-0000-0000-000000000001'), 'mpesa: invoice becomes partially paid');
+select tst.count_is($$select count(*) from public.invoice_payments where invoice_id='b1000000-0000-0000-0000-000000000001' and method='mpesa' and reference='RCT11AAAA1'$$, 1, 'mpesa: one payment recorded with the receipt');
+select tst.count_is($$select count(*) from public.finance_transactions where source='invoice_payment' and reference='RCT11AAAA1'$$, 1, 'mpesa: posted to the finance ledger');
+select tst.ok(public.mpesa_complete('ws_CO_2', 0, 'ok', 'RCT11AAAA1', 5000, '254712345678') = 'succeeded', 'mpesa: a repeated callback is harmless');
+select tst.count_is($$select count(*) from public.invoice_payments where invoice_id='b1000000-0000-0000-0000-000000000001'$$, 1, 'mpesa: a repeated callback does not pay twice');
+select tst.ok(public.mpesa_complete('nope', 0, 'ok', 'ZZZ99ZZZ99', 1, '254712345678') = 'unknown', 'mpesa: an unknown checkout id is ignored');
+
+-- cancellations, failures, duplicate receipts
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.works($$insert into _m select (public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000002','0712345678',500) ->> 'id')::uuid$$, 'mpesa: third request prepared');
+select tst.admin();
+select public.mpesa_attach_request((select id from _m order by ctid desc limit 1), 'MR-3', 'ws_CO_3');
+select tst.ok(public.mpesa_complete('ws_CO_3', 1032, 'Request cancelled by user', null, null, null) = 'cancelled', 'mpesa: customer cancelled on the phone');
+update public.mpesa_payments set created_at = now() - interval '1 hour';
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.works($$insert into _m select (public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000002','0712345678',500) ->> 'id')::uuid$$, 'mpesa: fourth request prepared');
+select tst.admin();
+select public.mpesa_attach_request((select id from _m order by ctid desc limit 1), 'MR-4', 'ws_CO_4');
+select tst.ok(public.mpesa_complete('ws_CO_4', 0, 'ok', 'RCT11AAAA1', 500, '254712345678') = 'needs_review', 'mpesa: a reused receipt number is never applied');
+select tst.count_is($$select count(*) from public.invoice_payments where invoice_id='b1000000-0000-0000-0000-000000000002'$$, 0, 'mpesa: nothing credited for the reused receipt');
+
+-- paying in full settles the invoice
+update public.mpesa_payments set created_at = now() - interval '1 hour';
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.works($$insert into _m select (public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000002','0712345678',2000) ->> 'id')::uuid$$, 'mpesa: full-balance request prepared');
+select tst.admin();
+select public.mpesa_attach_request((select id from _m order by ctid desc limit 1), 'MR-5', 'ws_CO_5');
+select tst.ok(public.mpesa_complete('ws_CO_5', 0, 'ok', 'RCT22BBBB2', 2000, '254712345678') = 'succeeded', 'mpesa: full payment applied');
+select tst.ok((select status='paid' from public.invoices where id='b1000000-0000-0000-0000-000000000002'), 'mpesa: invoice becomes paid');
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.count_is($$select count(*) from public.portal_payments()$$, 2, 'payments: history lists this customer''s receipts');
+select tst.fails_like($$select public.portal_mpesa_prepare('b1000000-0000-0000-0000-000000000002','0712345678',100)$$, '%cannot be paid online%', 'mpesa: a settled invoice cannot be paid again');
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.count_is($$select count(*) from public.portal_payments()$$, 0, 'payments: another customer sees none of them');
+
+select tst.admin();
+insert into public.company_settings(id, registered_name, brand_name) values (1, 'Samsal Test Ltd', 'Samsal') on conflict (id) do nothing;
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok(public.portal_company() ? 'legal_name' and public.portal_invoice('b1000000-0000-0000-0000-000000000001') -> 'customer' ->> 'company' = 'Alpha Traders', 'pdf data: company letterhead and the customer block are available');
+select tst.as_user('c0000000-0000-0000-0000-00000000000e');
+select tst.ok(public.portal_company() is null, 'pdf data: nothing for people without an active account');
+
+-- settings guard
+select tst.as_user_aal1('c0000000-0000-0000-0000-000000000002');
+select tst.fails_like($$update public.portal_payment_settings set mpesa_number='999999'$$, '%[mfa]%', 'settings: changing payment details needs a fresh authenticator code');
+select tst.as_user('c0000000-0000-0000-0000-000000000003');
+select tst.affects($$update public.portal_payment_settings set mpesa_number='999999'$$, 0, 'settings: staff without portal.manage cannot change them');
+
+-- quotation requests
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.fails_like($$select public.portal_request_quote('[]'::jsonb, null, null, null)$$, '%at least one%', 'quote request: empty request refused');
+select tst.fails_like($$select public.portal_request_quote('[{"description":"","quantity":"5"}]'::jsonb, null, null, null)$$, '%product or a description%', 'quote request: a line needs a product or description');
+select tst.fails_like($$select public.portal_request_quote('[{"description":"x"}]'::jsonb, null, current_date - 1, null)$$, '%date%', 'quote request: past date refused');
+create temp table _q (ref text);
+grant all on _q to public;
+select tst.works($$insert into _q select public.portal_request_quote('[{"product_id":"f0000000-0000-0000-0000-000000000003","quantity":"200 bags"},{"description":"Cooking oil 20L","quantity":"50"}]'::jsonb, 'Need monthly', current_date + 14, 'Thika')$$, 'quote request: a valid request is sent');
+select tst.admin();
+select tst.ok((select source='portal' and customer_id='d0000000-0000-0000-0000-00000000000a' and consent_recorded and product_text like '%Quote only item x 200 bags%' and product_text like '%Cooking oil 20L x 50%' from public.enquiries where reference=(select ref from _q)), 'quote request: lands in the staff enquiry list, tied to the customer');
+select tst.ok((select count(*)=0 from public.enquiries where source='portal' and product_text like '%Draft item%'), 'quote request: unpublished products cannot be named');
+insert into public.enquiries(customer_id, product_text, source) select 'd0000000-0000-0000-0000-00000000000a','x','portal' from generate_series(1,10);
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.fails_like($$select public.portal_request_quote('[{"description":"y"}]'::jsonb, null, null, null)$$, '%Too many%', 'quote request: capped per hour');
+select tst.as_user('c0000000-0000-0000-0000-00000000000e');
+select tst.fails($$select public.portal_request_quote('[{"description":"y"}]'::jsonb, null, null, null)$$, 'quote request: people without an active account cannot send');
+
+-- staff alert for a quotation request (rule is OFF by default; switch it on for this check)
+select tst.admin();
+update public.automation_rules set enabled = true where key = 'portal_staff_alerts';
+delete from public.enquiries where source = 'portal';
+insert into public.enquiries(customer_id, product_text, source) values ('d0000000-0000-0000-0000-00000000000a', 'Alert check', 'portal');
+select tst.ok((select count(*) from public.notifications where rule_key = 'portal_staff_alerts' and title like 'Quotation request %') >= 1, 'alerts: staff are told about a portal quotation request when the rule is on');
+update public.automation_rules set enabled = false where key = 'portal_staff_alerts';
+
+-- quotations
+select tst.admin();
+insert into public.quotations(id, number, customer_id, status, valid_until, tax_rate_percent, issue_date) values
+ ('b2000000-0000-0000-0000-000000000001','Q-T-1','d0000000-0000-0000-0000-00000000000a','draft', current_date + 10, 16, current_date),
+ ('b2000000-0000-0000-0000-000000000002','Q-T-2','d0000000-0000-0000-0000-00000000000a','draft', null, 0, current_date),
+ ('b2000000-0000-0000-0000-000000000003','Q-T-3','d0000000-0000-0000-0000-00000000000b','draft', null, 0, current_date),
+ ('b2000000-0000-0000-0000-000000000004','Q-T-4','d0000000-0000-0000-0000-00000000000a','draft', current_date - 1, 0, current_date - 5);
+insert into public.quotation_items(quotation_id, line_no, description, quantity, unit_price) values
+ ('b2000000-0000-0000-0000-000000000001',1,'Rice',10,100),
+ ('b2000000-0000-0000-0000-000000000002',1,'Sugar',1,50),
+ ('b2000000-0000-0000-0000-000000000003',1,'Flour',1,70),
+ ('b2000000-0000-0000-0000-000000000004',1,'Oil',2,25);
+update public.quotations set status='sent' where id in ('b2000000-0000-0000-0000-000000000001','b2000000-0000-0000-0000-000000000003','b2000000-0000-0000-0000-000000000004');
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.count_is($$select count(*) from public.portal_quotes()$$, 2, 'quotes: a customer sees only their own sent quotations (drafts hidden)');
+select tst.ok((select (public.portal_quote('b2000000-0000-0000-0000-000000000001') ->> 'total')::numeric = 1160 and (public.portal_quote('b2000000-0000-0000-0000-000000000001') ->> 'can_decide')::boolean), 'quotes: totals computed with tax, open for a decision');
+select tst.ok(public.portal_quote('b2000000-0000-0000-0000-000000000003') is null, 'quotes: another customer''s quotation cannot be opened');
+select tst.ok(public.portal_quote('b2000000-0000-0000-0000-000000000002') is null, 'quotes: a draft cannot be opened');
+select tst.count_is($$select count(*) from public.quotations$$, 0, 'quotes: no direct table access');
+select tst.fails_like($$select public.portal_quote_decide('b2000000-0000-0000-0000-000000000003','accepted',null)$$, '%no longer be answered%', 'quotes: cannot decide on another customer''s quotation');
+select tst.fails_like($$select public.portal_quote_decide('b2000000-0000-0000-0000-000000000001','maybe',null)$$, '%accept or decline%', 'quotes: only accept or decline');
+select tst.works($$select public.portal_quote_decide('b2000000-0000-0000-0000-000000000001','accepted','Please deliver Monday')$$, 'quotes: the customer accepts');
+select tst.fails_like($$select public.portal_quote_decide('b2000000-0000-0000-0000-000000000001','declined',null)$$, '%no longer be answered%', 'quotes: a decision cannot be changed');
+select tst.admin();
+select tst.ok((select status='accepted' and decision='accepted' and decision_note='Please deliver Monday' from public.quotations where id='b2000000-0000-0000-0000-000000000001'), 'quotes: decision and note recorded for staff');
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok((select public.portal_quote('b2000000-0000-0000-0000-000000000004') ->> 'status' = 'expired'), 'quotes: an out-of-date quotation shows as expired');
+select tst.fails_like($$select public.portal_quote_decide('b2000000-0000-0000-0000-000000000004','accepted',null)$$, '%no longer be answered%', 'quotes: an expired quotation cannot be accepted');
+
+-- structure
+select tst.admin();
+select tst.count_is($$select count(*) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname in ('portal_payment_settings','mpesa_payments') and not c.relrowsecurity$$, 0, 'structure: phase 2 tables have row level security');
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and (p.proname like 'portal\_%' or p.proname like 'mpesa\_%') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')$$, 0, 'structure: no portal or M-Pesa function is open to anonymous visitors');
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and (p.proname like 'portal\_%' or p.proname like 'mpesa\_%') and p.prosecdef and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')$$, 0, 'structure: all pin their search_path');
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;

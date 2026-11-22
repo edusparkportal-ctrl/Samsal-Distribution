@@ -10,6 +10,8 @@ export function PortalShell({ ctx, children }: { ctx: PortalContext; children: R
     { href: "/portal", label: "Home", icon: "home" },
     { href: "/portal/catalogue", label: "Catalogue", icon: "grid" },
     { href: "/portal/orders", label: "Orders", icon: "box" },
+    { href: "/portal/invoices", label: "Invoices", icon: "doc" },
+    { href: "/portal/quotes", label: "Quotes", icon: "help" },
     { href: "/portal/cart", label: "Cart", icon: "cart", badge: ctx.cartLines || undefined },
   ];
   return (

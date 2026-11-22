@@ -72,6 +72,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ o
                 {problems === 0 ? <Link href="/portal/checkout" className="btn-accent justify-center">Checkout</Link> : <span className="btn-accent justify-center opacity-60" aria-disabled="true">Checkout</span>}
                 <Link href="/portal/catalogue" className="btn-outline justify-center">Keep shopping</Link>
               </div>
+              <p className="mt-3 text-center text-sm"><Link href="/portal/quotes/new?from=cart" className="font-semibold text-teal-dark underline underline-offset-2">Need a better price? Request a quotation</Link></p>
               <form action={clearCart} className="mt-3 text-center"><button className="min-h-[44px] text-sm text-grey-500 underline underline-offset-2">Empty cart</button></form>
             </Panel>
           </aside>

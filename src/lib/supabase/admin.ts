@@ -17,6 +17,9 @@ import { requirePublicEnv } from "./env";
  *         resetting another person's authenticator (settings/users/actions.ts).
  *      5. customer portal registration: sending the invitation email and checking that the portal is open
  *         (app/portal/(auth)/actions.ts). Protected by CAPTCHA and rate limits that fail closed.
+ *      6. M-Pesa payments (lib/mpesa/service.ts): applying or failing a payment request through the server-only
+ *         mpesa_* functions, which customers cannot call. Reached from the secret-token callback route and from
+ *         actions that have already proven the signed-in customer owns the request.
  *    Everything else must use createSupabaseServerClient() so RLS applies.
  *  - Callers must do their own permission check BEFORE using it.
  */

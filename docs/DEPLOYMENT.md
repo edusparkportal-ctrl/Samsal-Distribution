@@ -87,3 +87,7 @@ Sensitive tables have RLS on and no anon access; every read is gated by `public.
 
 See `docs/PORTAL.md`. The portal module ships OFF; deploying the code changes nothing for existing users. Apply migration
 `20261120100000_customer_portal` with the normal pipeline, then follow "Turning it on" in that document.
+
+## Customer portal: invoices and M-Pesa (Phase 2)
+
+Migration `20261121100000_customer_portal_billing` is applied by the pipeline. M-Pesa needs `MPESA_*` variables (see `docs/PORTAL.md`, Phase 2) and stays off until they are set **and** staff switch it on in the portal Payment settings. Without them, customers still see invoices, PDFs, payment history, quotations and the manual payment details.

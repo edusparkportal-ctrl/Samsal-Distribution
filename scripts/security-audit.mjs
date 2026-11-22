@@ -70,6 +70,7 @@ const PUBLIC_ROUTES = {
   "src/app/api/health/route.ts": "uptime probe: reveals nothing but ok/unavailable",
   "src/app/api/automation/dispatch/route.ts": "scheduler: CRON_SECRET bearer, constant-time compare",
   "src/app/auth/confirm/route.ts": "email link: allow-listed types, rate limited, safeNext",
+  "src/app/api/mpesa/callback/[token]/route.ts": "Safaricom callback: secret path token (constant-time), 20KB cap, success confirmed by our own STK Query, applied once in the database",
 };
 let routeCount = 0;
 for (const f of src.filter((x) => /\/route\.ts$/.test(x))) {
@@ -78,6 +79,10 @@ for (const f of src.filter((x) => /\/route\.ts$/.test(x))) {
   const text = read(f);
   if (r.startsWith("src/app/admin/")) {
     if (!GUARDS.test(text)) fail("R2", r, "admin route handler does not check the caller");
+  } else if (r.startsWith("src/app/portal/")) {
+    // Customer portal routes: signed-in customer only, and data comes from portal_* functions (ownership is decided in the database).
+    if (!/getPortalSession\(|requireCustomer\(/.test(text) && !/rpc\("portal_mpesa_status"/.test(text)) fail("R2", r, "portal route handler does not check that the caller is an approved customer");
+    if (/createServiceClient|SUPABASE_SERVICE_ROLE_KEY/.test(text)) fail("R2", r, "portal route handler uses the service-role client directly");
   } else if (!(r in PUBLIC_ROUTES)) {
     fail("R2", r, "new public route: review it (auth, rate limit, input size) and add it to PUBLIC_ROUTES in scripts/security-audit.mjs");
   }
@@ -89,7 +94,8 @@ notes.push(`R2 ${routeCount} route handlers checked`);
 const SERVICE_OK = new Set(["src/lib/security/env.ts", // reports only whether the key exists
   "src/lib/supabase/admin.ts", "src/lib/supabase/public.ts", "src/lib/enquiries.ts", "src/lib/automation/dispatch.ts", "src/lib/security/events.ts",
   "src/app/admin/(panel)/settings/users/actions.ts",
-  "src/app/portal/(auth)/actions.ts"]); // portal registration sends the invitation; CAPTCHA + closed rate limits
+  "src/app/portal/(auth)/actions.ts", // portal registration sends the invitation; CAPTCHA + closed rate limits
+  "src/lib/mpesa/service.ts"]); // M-Pesa: only the server-only mpesa_* functions + reading a request's Safaricom id after ownership is proven
 for (const f of src) {
   const text = read(f).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
   if (/createServiceClient\s*\(|process\.env\.SUPABASE_SERVICE_ROLE_KEY/.test(text) && !SERVICE_OK.has(rel(f))) fail("R3", rel(f), "uses the service-role client or key; it bypasses Row Level Security. Review, then add to SERVICE_OK");

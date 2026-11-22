@@ -21,3 +21,26 @@ export type OrderDetail = {
   events: { kind: string; title: string; detail: string | null; at: string }[];
 };
 export type CategoryRow = { id: string; slug: string; name: string; product_count: number };
+
+// ---- phase 2 ----
+export type Party = { company: string | null; contact: string | null; email: string | null; phone: string | null; location: string | null };
+export type InvoiceRow = {
+  id: string; number: string; status: string; issue_date: string | null; due_date: string | null; currency: string; subtotal: number; tax: number; total: number;
+  paid: number; balance: number; overdue: boolean; order_number: string | null; total_count: number;
+};
+export type InvoiceDetail = {
+  id: string; number: string; status: string; currency: string; issue_date: string | null; due_date: string | null; tax_rate: number; notes: string | null; customer: Party;
+  overdue: boolean; order_id: string | null; order_number: string | null; subtotal: number; tax: number; total: number; paid: number; balance: number;
+  items: { line_no: number; description: string; quantity: number; unit_price: number; line_total: number }[];
+  payments: { paid_on: string; amount: number; method: string; reference: string | null }[];
+};
+export type PaymentRow = { paid_on: string; amount: number; method: string; reference: string | null; invoice_id: string; invoice_number: string; currency: string; total_count: number };
+export type PayInfo = { mpesa_online: boolean; mpesa_kind: "paybill" | "till"; mpesa_number: string | null; bank_instructions: string | null; payment_note: string | null };
+export type CompanyInfo = { legal_name: string | null; address: string | null; city: string | null; country: string | null; registration_details: string | null; tax_pin: string | null; quotation_terms: string | null; phone: string | null; email: string | null };
+export type QuoteRow = { id: string; number: string; status: string; issue_date: string; valid_until: string | null; currency: string; total: number; total_count: number };
+export type QuoteDetail = {
+  id: string; number: string; status: string; currency: string; issue_date: string; valid_until: string | null; delivery_terms: string | null; payment_terms: string | null; notes: string | null;
+  tax_rate: number; subtotal: number; tax: number; total: number; can_decide: boolean; decision: string | null; decision_at: string | null; decision_note: string | null; customer: Party;
+  items: { line_no: number; description: string; quantity: number; unit: string | null; unit_price: number; line_total: number }[];
+};
+export type MpesaStatus = { id: string; status: string; amount: number; receipt: string | null; invoice_id: string; age: number; message: string | null };

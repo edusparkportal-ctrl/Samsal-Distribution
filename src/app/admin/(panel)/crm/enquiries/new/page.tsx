@@ -16,7 +16,7 @@ export default async function NewEnquiry({ searchParams }: { searchParams: Promi
       <Flash ok={sp.ok} error={sp.error} />
       <Panel>
         <form action={createEnquiry} className="grid gap-4 sm:grid-cols-2">
-          <F id="source" label="Source"><select id="source" name="source" className="field-input" defaultValue="phone">{ENQUIRY_SOURCES.filter((s) => s !== "website").map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}</select></F>
+          <F id="source" label="Source"><select id="source" name="source" className="field-input" defaultValue="phone">{ENQUIRY_SOURCES.filter((s) => s !== "website" && s !== "portal").map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}</select></F>
           <F id="company_name" label="Organisation (optional)"><input id="company_name" name="company_name" maxLength={160} className="field-input" /></F>
           <F id="contact_name" label="Contact person"><input id="contact_name" name="contact_name" required maxLength={120} className="field-input" /></F>
           <F id="email" label="Email"><input id="email" type="email" name="email" required maxLength={200} className="field-input" /></F>
