@@ -71,6 +71,16 @@ export function parseShillings(v: FormDataEntryValue | null | undefined): number
   return Number.isFinite(n) && n >= 1 && n <= 250_000 ? Math.round(n) : null;
 }
 
+export const TICKET_STATUS: Record<string, { label: string; tone: Tone }> = {
+  open: { label: "Open", tone: "amber" },
+  in_progress: { label: "We are on it", tone: "teal" },
+  awaiting_customer: { label: "Waiting for you", tone: "red" },
+  resolved: { label: "Resolved", tone: "green" },
+  closed: { label: "Closed", tone: "grey" },
+};
+export const ticketStatus = (s: string) => TICKET_STATUS[s] ?? { label: s, tone: "grey" as Tone };
+export const TICKET_CATEGORIES: [string, string][] = [["order", "An order"], ["delivery", "A delivery"], ["invoice", "An invoice"], ["payment", "A payment"], ["product", "A product"], ["account", "My account"], ["other", "Something else"]];
+
 export const AVAILABILITY: Record<string, { label: string; tone: Tone }> = {
   in_stock: { label: "In stock", tone: "green" },
   low_stock: { label: "Low stock", tone: "amber" },

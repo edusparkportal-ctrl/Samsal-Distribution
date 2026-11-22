@@ -46,7 +46,6 @@ Existing customers: they apply through the portal, or staff can ask them to. App
 - Prices exclude VAT; the invoice states the final amount.
 - Customers cannot edit company details or add colleagues themselves; staff link additional logins to the same customer.
 - Customers do not use MFA in this phase.
-- Bulk upload and support tickets arrive in Phase 3.
 
 ---
 
@@ -105,3 +104,32 @@ The callback URL given to Safaricom is built from `NEXT_PUBLIC_SITE_URL` (must b
 - Tax shown is the invoice's tax rate; invoice numbering and issuing are unchanged (staff in Finance).
 - M-Pesa pays whole shillings in KES only; invoices in other currencies show manual payment details.
 - A quotation accepted online does not create an order by itself; staff turn it into an order or invoice as before.
+
+---
+
+# Phase 3: bulk order upload and support tickets
+
+Migration `20261122100000_customer_portal_support`.
+
+## Bulk order upload (`/portal/bulk`)
+
+1. The customer uploads a CSV (or pastes rows): column 1 is the **product code (a variant SKU) or exact product name or slug**, column 2 is the **quantity**. Header optional; comma, semicolon or tab; up to 300 rows and 200 KB.
+2. The app only turns text into rows (`src/lib/portal/csv.ts`, unit tested). **The database decides what each row means** (`portal_bulk_preview`): the product must be published; the customer's own price applies; online price, minimum order, pack step and stock are enforced; a product listed twice is flagged; unknown, ambiguous, empty and invalid rows say why.
+3. Nothing is added until the customer confirms. `portal_bulk_add` re-checks every row itself (the preview is never trusted) and sets the cart quantities. Checkout then validates everything again, as before.
+
+Staff tip: give customers the variant SKUs you want them to use (Inventory > Products > variants); exact names also work.
+
+## Support tickets (`/portal/support`)
+
+- Customers open a ticket (category, subject, message, optionally one of **their** orders or invoices), reply, and close it. Limits: 5 new tickets an hour (20 a day), 30 messages an hour. A closed ticket cannot be replied to; replying to a *resolved* ticket reopens it.
+- Staff: **Customer portal > Support tickets**. Reply, add an **internal note** (never visible to the customer; staff replies show the first name only), change status, assign to yourself. Needs `portal.view` to read and `portal.manage` to reply.
+- Status moves automatically: a customer message puts the ticket back to *Open*; a staff reply sets *Awaiting customer*; internal notes change nothing.
+- Messages are append-only; a ticket's subject, customer and links cannot be edited. Status and assignee changes are audited.
+- The dashboard shows tickets waiting for the customer's reply. The "Customer portal alerts" automation (OFF by default) also tells the sales team about new tickets and customer replies.
+- Customers are **not emailed** about replies yet (they see them in the portal). Email notifications can be added once a sending domain is verified.
+
+## Known limits (Phase 3)
+
+- No file attachments on tickets.
+- Bulk upload accepts CSV only (save Excel sheets as CSV).
+- Bulk upload does not create orders directly: it fills the cart so the customer can review prices and stock first.

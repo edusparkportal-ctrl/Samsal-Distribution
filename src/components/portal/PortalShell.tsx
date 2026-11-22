@@ -11,7 +11,9 @@ export function PortalShell({ ctx, children }: { ctx: PortalContext; children: R
     { href: "/portal/catalogue", label: "Catalogue", icon: "grid" },
     { href: "/portal/orders", label: "Orders", icon: "box" },
     { href: "/portal/invoices", label: "Invoices", icon: "doc" },
-    { href: "/portal/quotes", label: "Quotes", icon: "help" },
+    { href: "/portal/quotes", label: "Quotes", icon: "help", desktopOnly: true },
+    { href: "/portal/bulk", label: "Bulk order", icon: "grid", desktopOnly: true },
+    { href: "/portal/support", label: "Support", icon: "help", desktopOnly: true },
     { href: "/portal/cart", label: "Cart", icon: "cart", badge: ctx.cartLines || undefined },
   ];
   return (

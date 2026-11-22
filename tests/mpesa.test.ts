@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { callbackUrl, darajaPassword, darajaTimestamp, getToken, mpesaConfig, parseCallback, processCallback, reconcile, stkPush, stkQuery, tokenMatches, type Complete, type FetchLike } from "@/lib/mpesa/daraja";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
 import { invoiceStatus, parseShillings, quoteStatus } from "@/lib/portal/format";
+import { MAX_BYTES, MAX_ROWS, TEMPLATE_CSV, parseOrderCsv } from "@/lib/portal/csv";
 
 let passed = 0;
 const failures: string[] = [];
@@ -179,6 +180,28 @@ t("invoice PDF is a valid PDF with the amounts, and survives hostile text", () =
   assert.ok(pdf.includes("11,600.00") && pdf.includes("6,600.00") && pdf.includes("INV-2026-00012"), "total 11,600, balance 6,600");
   assert.ok(buildInvoicePdf({ ...base, status: "paid", payments: [{ paidOn: "2026-11-05", amount: 11600, method: "bank", reference: null }] }).toString("latin1").includes("INVOICE - PAID"));
   assert.ok(buildInvoicePdf({ ...base, lines: Array.from({ length: 80 }, (_, i) => ({ description: `Item ${i}`, quantity: 1, unitPrice: 1 })) }).toString("latin1").includes("Page 2 of"), "long invoices paginate");
+});
+
+t("CSV: header, delimiters, quotes, BOM and blank lines", () => {
+  const ok = (s: string) => { const r = parseOrderCsv(s); assert.ok(r.ok, s); return r.ok ? r.rows : []; };
+  assert.deepEqual(ok("code,quantity\nRICE50,20\nSugar,10"), [{ line: 2, ref: "RICE50", quantity: "20" }, { line: 3, ref: "Sugar", quantity: "10" }]);
+  assert.deepEqual(ok("\uFEFFSKU;Qty\r\nA1;5\r\n\r\nB2;6\r\n"), [{ line: 2, ref: "A1", quantity: "5" }, { line: 4, ref: "B2", quantity: "6" }]);
+  assert.deepEqual(ok("quantity\tproduct\n3\tRice"), [{ line: 2, ref: "Rice", quantity: "3" }]);
+  assert.deepEqual(ok('"Rice, 50kg",4\n"He said ""hi""",1'), [{ line: 1, ref: "Rice, 50kg", quantity: "4" }, { line: 2, ref: 'He said "hi"', quantity: "1" }]);
+  assert.deepEqual(ok("RICE50,2 0"), [{ line: 1, ref: "RICE50", quantity: "20" }]);
+  assert.deepEqual(ok("Sugar"), [{ line: 1, ref: "Sugar", quantity: "" }]);
+  assert.deepEqual(parseOrderCsv(TEMPLATE_CSV).ok && (parseOrderCsv(TEMPLATE_CSV) as { rows: unknown[] }).rows.length, 2);
+});
+t("CSV: refuses empty, binary, oversized and too many rows", () => {
+  for (const [bad, re] of [["", /empty/], ["  \n\n", /empty/], ["code,quantity\n", /no rows/], ["a,1\u0000b", /CSV text/], ["x".repeat(MAX_BYTES + 1), /too large/],
+    [Array.from({ length: MAX_ROWS + 1 }, (_, i) => `P${i},1`).join("\n"), /300 at a time|up to 300/]] as [string, RegExp][]) {
+    const r = parseOrderCsv(bad); assert.ok(!r.ok, bad.slice(0, 20)); if (!r.ok) assert.match(r.error, re);
+  }
+  assert.ok(parseOrderCsv(Array.from({ length: MAX_ROWS }, (_, i) => `P${i},1`).join("\n")).ok);
+});
+t("CSV: long cells are clipped and nothing is evaluated", () => {
+  const r = parseOrderCsv(`${"A".repeat(500)},${"9".repeat(50)}\n=HYPERLINK("x"),1`);
+  assert.ok(r.ok); if (r.ok) { assert.equal(r.rows[0].ref.length, 80); assert.equal(r.rows[0].quantity.length, 20); assert.equal(r.rows[1].ref, '=HYPERLINK("x")'); }
 });
 
 (async () => {

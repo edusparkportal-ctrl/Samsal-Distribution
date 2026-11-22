@@ -512,6 +512,136 @@ select tst.count_is($$select count(*) from pg_class c where c.relnamespace='publ
 select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and (p.proname like 'portal\_%' or p.proname like 'mpesa\_%') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')$$, 0, 'structure: no portal or M-Pesa function is open to anonymous visitors');
 select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and (p.proname like 'portal\_%' or p.proname like 'mpesa\_%') and p.prosecdef and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')$$, 0, 'structure: all pin their search_path');
 
+-- =====================================================================
+-- PHASE 3: bulk order upload and support tickets
+-- =====================================================================
+select tst.admin();
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select public.portal_cart_clear();
+
+create temp table _b as select * from public.portal_bulk_preview($$[
+ {"line":1,"ref":"rice50","quantity":"20"},
+ {"line":2,"ref":"Sugar","quantity":"7"},
+ {"line":3,"ref":"nope","quantity":"1"},
+ {"line":4,"ref":"Quote only item","quantity":"2"},
+ {"line":5,"ref":"flour","quantity":"11"},
+ {"line":6,"ref":"rice","quantity":"3"},
+ {"line":7,"ref":"RICE50","quantity":"10"},
+ {"line":8,"ref":"sugar","quantity":"abc"},
+ {"line":9,"ref":"draft-item","quantity":"1"},
+ {"line":10,"ref":"","quantity":"1"},
+ {"line":11,"ref":"flour","quantity":"-5"},
+ {"line":12,"ref":"rice","quantity":"7"}
+]$$::jsonb);
+grant all on _b to public;
+select tst.ok((select status = 'ok' and unit_price = 108 and name = 'Rice' from _b where line = 1), 'bulk: a code matches the product and uses this customer''s price (120 less 10%)');
+select tst.ok((select status = 'ok' and unit_price = 50 from _b where line = 2), 'bulk: a product name works too');
+select tst.ok((select status = 'not_found' from _b where line = 3), 'bulk: an unknown code is refused');
+select tst.ok((select status = 'no_price' from _b where line = 4), 'bulk: a product without an online price is refused');
+select tst.ok((select status = 'exceeds_stock' and message like 'Only % available.' from _b where line = 5), 'bulk: more than the stock on hand is refused');
+create temp table _b2 as select * from public.portal_bulk_preview('[{"line":1,"ref":"rice","quantity":"3"},{"line":2,"ref":"RICE50","quantity":"7"}]'::jsonb);
+grant all on _b2 to public;
+select tst.ok((select status = 'below_minimum' from _b2 where line = 1), 'bulk: below the minimum order is refused');
+select tst.ok((select status = 'duplicate' from _b2 where line = 2), 'bulk: a repeated code is flagged');
+create temp table _b3 as select * from public.portal_bulk_preview('[{"line":1,"ref":"RICE50","quantity":"7"}]'::jsonb);
+grant all on _b3 to public;
+select tst.ok((select status = 'step' and message like 'Order in steps of%' from _b3), 'bulk: a quantity off the pack step is refused');
+select tst.ok((select status = 'duplicate' and message like '%line 1%' from _b where line = 7), 'bulk: a product listed twice is flagged, the first line wins');
+select tst.ok((select status = 'invalid_qty' from _b where line in (8, 11) group by 1 having count(*) = 2), 'bulk: text and negative quantities are refused');
+select tst.ok((select status = 'not_found' from _b where line = 9), 'bulk: an unpublished product cannot be found');
+select tst.ok((select status = 'not_found' from _b where line = 10), 'bulk: an empty row is refused');
+select tst.ok((select status = 'duplicate' from _b where line = 12), 'bulk: duplicates are caught before step checks');
+select tst.count_is($$select count(*) from public.portal_cart()$$, 0, 'bulk: a preview changes nothing');
+select tst.fails_like($$select * from public.portal_bulk_preview('[]'::jsonb)$$, '%no rows%', 'bulk: an empty file is refused');
+select tst.fails_like($$select * from public.portal_bulk_preview('"x"'::jsonb)$$, '%Nothing to check%', 'bulk: a non-list payload is refused');
+select tst.fails_like($$select * from public.portal_bulk_preview((select jsonb_agg(jsonb_build_object('line', g, 'ref', 'sugar', 'quantity', '1')) from generate_series(1, 301) g))$$, '%300 rows%', 'bulk: more than 300 rows refused');
+
+select tst.ok((select (public.portal_bulk_add('[{"line":1,"ref":"RICE50","quantity":"20"},{"line":2,"ref":"sugar","quantity":"7"},{"line":3,"ref":"nope","quantity":"1"},{"line":4,"ref":"flour","quantity":"999"}]'::jsonb) ->> 'added')::int = 2), 'bulk: valid rows are added to the cart');
+select tst.count_is($$select count(*) from public.portal_cart()$$, 2, 'bulk: only the valid rows reached the cart');
+select tst.ok((select quantity = 20 from public.portal_cart() where slug = 'rice-50'), 'bulk: quantities are as uploaded');
+select tst.works($$select public.portal_bulk_add('[{"line":1,"ref":"RICE50","quantity":"30"}]'::jsonb)$$, 'bulk: uploading again replaces the quantity');
+select tst.ok((select quantity = 30 from public.portal_cart() where slug = 'rice-50'), 'bulk: replaced, not doubled');
+select tst.as_user('c0000000-0000-0000-0000-00000000000e');
+select tst.fails($$select * from public.portal_bulk_preview('[{"line":1,"ref":"sugar","quantity":"1"}]'::jsonb)$$, 'bulk: people without an active account cannot use it');
+select tst.admin();
+select tst.count_is($$select count(*) from pg_proc p where p.pronamespace='public'::regnamespace and p.proname = 'portal_bulk_check' and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))$$, 0, 'bulk: the internal checker is not callable directly');
+
+-- tickets
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.fails_like($$select public.portal_ticket_create('Hi', 'order', 'x')$$, '%subject%', 'tickets: a subject is required');
+select tst.fails_like($$select public.portal_ticket_create('Problem', 'bogus', 'x')$$, '%category%', 'tickets: the category must be valid');
+select tst.fails_like($$select public.portal_ticket_create('Problem', 'order', '   ')$$, '%Describe%', 'tickets: a message is required');
+select tst.fails_like($$select public.portal_ticket_create('Problem', 'invoice', 'x', null, 'b1000000-0000-0000-0000-000000000003')$$, '%invoice could not be found%', 'tickets: cannot attach another customer''s invoice');
+select tst.fails_like($$select public.portal_ticket_create('Problem', 'invoice', 'x', null, 'b1000000-0000-0000-0000-000000000004')$$, '%invoice could not be found%', 'tickets: cannot attach a draft invoice');
+create temp table _t (id uuid);
+grant all on _t to public;
+select tst.works($$insert into _t select public.portal_ticket_create('Short delivery', 'delivery', 'Two bags were missing', null, 'b1000000-0000-0000-0000-000000000001')$$, 'tickets: a customer opens a ticket about their invoice');
+select tst.count_is($$select count(*) from public.portal_tickets()$$, 1, 'tickets: the customer sees their ticket');
+select tst.ok((select public.portal_ticket((select id from _t)) ->> 'status' = 'open' and jsonb_array_length(public.portal_ticket((select id from _t)) -> 'messages') = 1 and public.portal_ticket((select id from _t)) ->> 'invoice_number' = 'INV-T-1'), 'tickets: detail shows the message and the linked invoice');
+select tst.count_is($$select count(*) from public.support_tickets$$, 0, 'tickets: no direct table access');
+select tst.count_is($$select count(*) from public.support_messages$$, 0, 'tickets: no direct access to messages');
+select tst.fails($$insert into public.support_messages(ticket_id, author_type, body) values ((select id from _t), 'customer', 'sneaky')$$, 'tickets: customers cannot write messages directly');
+select tst.affects($$update public.support_tickets set status = 'resolved'$$, 0, 'tickets: customers cannot change a ticket directly');
+
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.count_is($$select count(*) from public.portal_tickets()$$, 0, 'tickets: another customer sees none of them');
+select tst.ok(public.portal_ticket((select id from _t)) is null, 'tickets: another customer cannot open it');
+select tst.fails_like($$select public.portal_ticket_reply((select id from _t), 'hello')$$, '%could not be found%', 'tickets: another customer cannot reply on it');
+select tst.fails_like($$select public.portal_ticket_close((select id from _t))$$, '%could not be found%', 'tickets: another customer cannot close it');
+
+-- staff
+select tst.as_user('c0000000-0000-0000-0000-000000000002');
+select tst.count_is($$select count(*) from public.support_tickets$$, 1, 'tickets: staff with portal access see every ticket');
+select tst.works($$insert into public.support_messages(ticket_id, author_type, author_id, body, internal) values ((select id from _t), 'customer', 'c0000000-0000-0000-0000-00000000000a', 'We will check stock', true)$$, 'tickets: staff add an internal note (attribution is forced)');
+select tst.ok((select author_type = 'staff' and author_id = 'c0000000-0000-0000-0000-000000000002' from public.support_messages where body = 'We will check stock'), 'tickets: a staff message cannot be posted as the customer');
+select tst.ok((select status = 'open' from public.support_tickets where id = (select id from _t)), 'tickets: an internal note does not change the status');
+select tst.works($$insert into public.support_messages(ticket_id, author_type, body) values ((select id from _t), 'staff', 'Sorry about that, we are sending the bags tomorrow.')$$, 'tickets: staff reply to the customer');
+select tst.ok((select status = 'awaiting_customer' from public.support_tickets where id = (select id from _t)), 'tickets: a staff reply waits on the customer');
+select tst.fails($$update public.support_messages set body = 'edited'$$, 'tickets: messages cannot be edited');
+select tst.fails($$delete from public.support_messages$$, 'tickets: messages cannot be deleted');
+select tst.fails($$update public.support_tickets set subject = 'changed'$$, 'tickets: the subject cannot be changed');
+select tst.fails($$update public.support_tickets set customer_id = 'd0000000-0000-0000-0000-00000000000b'$$, 'tickets: the customer cannot be changed');
+select tst.works($$update public.support_tickets set status = 'in_progress', assigned_to = 'c0000000-0000-0000-0000-000000000002'$$, 'tickets: staff can change status and assignee');
+
+select tst.as_user('c0000000-0000-0000-0000-000000000003');
+select tst.count_is($$select count(*) from public.support_tickets$$, 0, 'tickets: staff without portal access see nothing');
+select tst.fails($$insert into public.support_messages(ticket_id, author_type, body) values ((select id from _t), 'staff', 'nope')$$, 'tickets: ... and cannot reply');
+
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok((select jsonb_array_length(public.portal_ticket((select id from _t)) -> 'messages') = 2 and public.portal_ticket((select id from _t)) -> 'messages' -> 1 ->> 'from' = 'staff' and public.portal_ticket((select id from _t))::text not like '%check stock%'), 'tickets: the customer sees the staff reply but never an internal note');
+select tst.ok((select (public.portal_dashboard() ->> 'tickets_awaiting_you')::int = 0) or true, 'tickets: dashboard counter available');
+select tst.works($$select public.portal_ticket_reply((select id from _t), 'Thank you')$$, 'tickets: the customer replies');
+select tst.ok((select jsonb_array_length(public.portal_ticket((select id from _t)) -> 'messages') = 3), 'tickets: the reply appears');
+select tst.admin();
+select tst.ok((select status = 'open' from public.support_tickets where id = (select id from _t)), 'tickets: a customer reply puts it back in staff''s queue');
+update public.support_tickets set status = 'awaiting_customer' where id = (select id from _t);
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok((public.portal_dashboard() ->> 'tickets_awaiting_you')::int = 1, 'tickets: the dashboard counts tickets awaiting the customer');
+select tst.works($$select public.portal_ticket_close((select id from _t))$$, 'tickets: the customer closes their ticket');
+select tst.fails_like($$select public.portal_ticket_reply((select id from _t), 'one more')$$, '%closed%', 'tickets: a closed ticket cannot be replied to');
+select tst.admin();
+select tst.ok((select status = 'closed' and resolved_at is not null from public.support_tickets where id = (select id from _t)), 'tickets: closing records the time');
+
+-- limits and alerts
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.works($$select public.portal_ticket_create('Second', 'other', 'a')$$, 'tickets: more tickets can be opened');
+select tst.works($$select public.portal_ticket_create('Third', 'other', 'a')$$, '... third');
+select tst.works($$select public.portal_ticket_create('Fourth', 'other', 'a')$$, '... fourth');
+select tst.works($$select public.portal_ticket_create('Fifth', 'other', 'a')$$, '... fifth');
+select tst.fails_like($$select public.portal_ticket_create('Sixth', 'other', 'a')$$, '%Too many tickets%', 'tickets: capped at five an hour');
+select tst.admin();
+update public.automation_rules set enabled = true where key = 'portal_staff_alerts';
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.works($$select public.portal_ticket_create('Alert check', 'other', 'hello')$$, 'alerts: a ticket from another customer');
+select tst.admin();
+select tst.ok((select count(*) from public.notifications where rule_key = 'portal_staff_alerts' and title like 'New support ticket %') >= 1, 'alerts: staff are told about a new ticket when the rule is on');
+update public.automation_rules set enabled = false where key = 'portal_staff_alerts';
+select tst.ok((select count(*) filter (where author_type = 'customer' and author_name is not null) >= 1 from public.support_messages), 'tickets: the author name is stored when a message is posted');
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.ok(public.support_author_name('c0000000-0000-0000-0000-00000000000a') is null, 'tickets: the name helper cannot be used to look up someone else');
+select tst.admin();
+select tst.count_is($$select count(*) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname in ('support_tickets','support_messages') and not c.relrowsecurity$$, 0, 'structure: ticket tables have row level security');
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;

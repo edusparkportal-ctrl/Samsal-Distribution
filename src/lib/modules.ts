@@ -104,6 +104,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
       { label: "List prices", href: "/admin/portal/prices", permission: "portal.view" },
       { label: "Customer prices", href: "/admin/portal/customer-prices", permission: "portal.view" },
       { label: "Tracking updates", href: "/admin/portal/updates", permission: "portal.view" },
+      { label: "Support tickets", href: "/admin/portal/tickets", permission: "portal.view" },
       { label: "M-Pesa payments", href: "/admin/portal/mpesa", permission: "portal.view" },
       { label: "Payment settings", href: "/admin/portal/payment-settings", permission: "portal.view" },
     ],

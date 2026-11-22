@@ -14,7 +14,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ o
   const ctx = await requireCustomer();
   const supabase = await createSupabaseServerClient();
   const [{ data: dash }, { data: recent }] = await Promise.all([supabase.rpc("portal_dashboard"), supabase.rpc("portal_orders", { p_limit: 5 })]);
-  const d = (dash ?? {}) as { open_orders?: number; awaiting_delivery?: number; ordered_90_days?: number; cart_lines?: number; outstanding?: number; overdue_count?: number; open_invoices?: number; open_quotes?: number };
+  const d = (dash ?? {}) as { open_orders?: number; awaiting_delivery?: number; ordered_90_days?: number; cart_lines?: number; outstanding?: number; overdue_count?: number; open_invoices?: number; open_quotes?: number; tickets_awaiting_you?: number };
   const orders = (recent as OrderRow[] | null) ?? [];
   const last = orders.find((o) => o.status !== "cancelled");
 
@@ -30,6 +30,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ o
         <StatCard label="Ordered, last 90 days" value={formatMoney(d.ordered_90_days ?? 0)} hint="Excluding cancelled orders" />
         <StatCard label="In your cart" value={d.cart_lines ?? 0} href="/portal/cart" />
         <StatCard label="Amount owed" value={formatMoney(d.outstanding ?? 0)} href="/portal/invoices" hint={d.overdue_count ? `${d.overdue_count} overdue` : `${d.open_invoices ?? 0} unpaid invoice${d.open_invoices === 1 ? "" : "s"}`} />
+        {!!d.tickets_awaiting_you && <StatCard label="Support: waiting for you" value={d.tickets_awaiting_you} href="/portal/support?status=open" />}
         <StatCard label="Quotations to answer" value={d.open_quotes ?? 0} href="/portal/quotes" />
       </div>
       <Panel title="Recent orders" className="mt-6">

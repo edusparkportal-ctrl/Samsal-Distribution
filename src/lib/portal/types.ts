@@ -44,3 +44,11 @@ export type QuoteDetail = {
   items: { line_no: number; description: string; quantity: number; unit: string | null; unit_price: number; line_total: number }[];
 };
 export type MpesaStatus = { id: string; status: string; amount: number; receipt: string | null; invoice_id: string; age: number; message: string | null };
+
+// ---- phase 3 ----
+export type TicketRow = { id: string; reference: string; subject: string; category: string; status: string; last_activity_at: string; created_at: string; total_count: number };
+export type TicketDetail = {
+  id: string; reference: string; subject: string; category: string; status: string; created_at: string; resolved_at: string | null;
+  order_id: string | null; order_number: string | null; invoice_id: string | null; invoice_number: string | null;
+  messages: { id: string; from: "customer" | "staff"; author: string; body: string; created_at: string }[];
+};
