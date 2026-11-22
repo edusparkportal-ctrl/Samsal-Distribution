@@ -24,11 +24,11 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Secrets present?
         run: |
           [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] || { echo "::error::Supabase secrets are not configured; see docs/SECURITY.md"; exit 1; }
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with: { version: latest }
       - name: Dump production (schema + data, public schema)
         run: |
