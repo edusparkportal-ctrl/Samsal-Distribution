@@ -9,14 +9,19 @@ import { requestQuote } from "../actions";
 export const metadata = { title: "Request a quotation" };
 const ROWS = 8;
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ from?: string; ok?: string; error?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ from?: string; product?: string; name?: string; ok?: string; error?: string }> }) {
   const sp = await searchParams;
-  await requireCustomer();
+  const ctx = await requireCustomer();
   let prefill: { id: string | null; name: string; qty: string }[] = [];
   if (sp.from === "cart") {
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase.rpc("portal_cart");
     prefill = ((data as CartRow[] | null) ?? []).slice(0, ROWS).map((r) => ({ id: r.product_id, name: r.name, qty: String(r.quantity) }));
+  }
+  if (prefill.length === 0 && (sp.name || sp.product)) {
+    // From a product card or a catalogue search. The database re-checks the product id and uses its own name.
+    const id = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sp.product ?? "") ? sp.product! : null;
+    prefill = [{ id, name: String(sp.name ?? "").slice(0, 150), qty: "" }];
   }
   const today = new Date().toISOString().slice(0, 10);
   return (
@@ -24,6 +29,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
       <p className="mb-4 text-sm"><Link href="/portal/quotes" className="font-semibold text-teal-dark underline underline-offset-2">← Quotations</Link></p>
       <PageHeader title="Request a quotation" description="List what you need. Our team replies with a price, usually within one working day." />
       <PortalFlash ok={sp.ok} error={sp.error} />
+      <p className="mb-4 rounded-md border border-grey-200 bg-grey px-3 py-2 text-sm text-charcoal">
+        Sending as <strong>{ctx.company}</strong> ({ctx.contactName}, {ctx.email}). We already have your contact and account details, so you only need to say what you want.
+      </p>
       <form action={requestQuote} className="space-y-6">
         <Panel title="What do you need?">
           <div className="space-y-3">

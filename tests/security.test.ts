@@ -164,7 +164,7 @@ function fakeRedis(opts: { fail?: "http" | "throw" | "slow" | "shape" } = {}) {
     const script = p.split("; ").find((d) => d.startsWith("script-src"))!;
     assert.ok(script.includes(`'nonce-${n}'`) && script.includes("'strict-dynamic'")); assert.ok(!script.includes("unsafe-inline")); assert.ok(!script.includes("unsafe-eval"));
     assert.ok(p.includes("object-src 'none'") && p.includes("base-uri 'self'") && p.includes("form-action 'self'") && p.includes("frame-ancestors 'self'"));
-    assert.ok(p.includes("connect-src 'self' https://abc.supabase.co wss://abc.supabase.co") && p.includes("upgrade-insecure-requests") && p.includes("report-uri /api/csp-report"));
+    assert.ok(p.includes("connect-src 'self' https://challenges.cloudflare.com https://abc.supabase.co wss://abc.supabase.co") && p.includes("upgrade-insecure-requests") && p.includes("report-uri /api/csp-report"));
   });
   await t("csp: public policy allows Turnstile only, never eval, pins images to Supabase", () => {
     const p = buildCsp({ supabaseUrl: "https://abc.supabase.co" });

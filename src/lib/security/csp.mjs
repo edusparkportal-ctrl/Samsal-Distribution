@@ -29,7 +29,7 @@ export function buildCsp(o = {}) {
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", ...(supa ? [supa] : [])],
     "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", ...(supa ? [supa] : []), ...(supaWs ? [supaWs] : [])],
+    "connect-src": ["'self'", TURNSTILE, ...(supa ? [supa] : []), ...(supaWs ? [supaWs] : [])],
     "frame-src": [TURNSTILE],
     "media-src": ["'self'", ...(supa ? [supa] : [])],
     "object-src": ["'none'"],

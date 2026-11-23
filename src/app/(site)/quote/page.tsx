@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { QuoteForm } from "@/components/QuoteForm";
 import { PageHero } from "@/components/ui";
@@ -5,6 +6,7 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { site } from "@/config/site";
 import { getSiteContent } from "@/lib/content/load";
 import { pageMetadata, withSeo } from "@/lib/seo";
+import { getPortalSession } from "@/lib/portal/session";
 
 export async function generateMetadata() {
   return withSeo(
@@ -24,6 +26,11 @@ export default async function QuotePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
+  // A signed-in, approved customer already has their details on file: send them to the portal request form.
+  if ((await getPortalSession()).status === "ok") {
+    const p = Array.isArray(sp.product) ? sp.product[0] : sp.product;
+    redirect(p ? `/portal/quotes/new?name=${encodeURIComponent(p.slice(0, 150))}` : "/portal/quotes/new");
+  }
   const { categories } = await getSiteContent();
   const raw = sp.product;
   const initialProduct = (Array.isArray(raw) ? raw[0] : raw)?.slice(0, 150) ?? "";

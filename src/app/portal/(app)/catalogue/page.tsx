@@ -54,7 +54,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
       {products.length === 0 ? (
         <div className="card p-8 text-center text-sm text-charcoal">
           <p>No products match{q ? ` “${q}”` : ""}.</p>
-          <p className="mt-2"><Link href="/portal/catalogue" className="font-semibold text-teal-dark underline">Clear the search</Link> or <Link href="/quote" className="font-semibold text-teal-dark underline">request a quotation</Link> for something specific.</p>
+          <p className="mt-2"><Link href="/portal/catalogue" className="font-semibold text-teal-dark underline">Clear the search</Link> or <Link href={q ? `/portal/quotes/new?name=${encodeURIComponent(q.slice(0, 150))}` : "/portal/quotes/new"} className="font-semibold text-teal-dark underline">request a quotation</Link> for something specific.</p>
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

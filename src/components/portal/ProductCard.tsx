@@ -34,7 +34,7 @@ export function Price({ row }: { row: CatalogueRow }) {
 
 export function AddToCart({ row, back }: { row: CatalogueRow; back: string }) {
   if (!row.orderable) {
-    return <Link href={`/quote`} className="btn-outline w-full justify-center">Request a quotation</Link>;
+    return <Link href={`/portal/quotes/new?product=${row.product_id}&name=${encodeURIComponent(row.name.slice(0, 150))}`} className="btn-outline w-full justify-center">Request a quotation</Link>;
   }
   const a = availability(row.availability);
   const blocked = row.availability === "out_of_stock";
