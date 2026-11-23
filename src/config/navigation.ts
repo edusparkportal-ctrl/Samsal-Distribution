@@ -8,3 +8,6 @@ export const mainNav = [
 ] as const;
 
 export const quoteHref = "/quote";
+
+/** Customer wholesale portal (sign in or apply for an account). */
+export const portalHref = "/portal/login";

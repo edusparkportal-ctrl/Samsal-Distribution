@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Mail, MapPin, Menu, Phone, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Mail, MapPin, Menu, Phone, Store, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { SocialIcon } from "@/components/SocialIcon";
-import { mainNav, quoteHref } from "@/config/navigation";
+import { mainNav, portalHref, quoteHref } from "@/config/navigation";
 
 export type HeaderCategory = { slug: string; name: string; summary: string };
 type HeaderSocial = { id: string; platform: string; url: string };
@@ -109,7 +109,7 @@ export function Header({ social = [], categories = [], tagline, location, phone,
     }
   };
 
-  const hasTopBar = Boolean(tagline || location || phone || email || social.length);
+  const hasTopBar = true; // always shown on large screens: it carries the customer portal link
 
   return (
     <>
@@ -119,6 +119,12 @@ export function Header({ social = [], categories = [], tagline, location, phone,
           <div className="container-x flex h-9 items-center justify-between gap-6">
             <p className="font-semibold tracking-wide text-teal-light">{tagline}</p>
             <ul className="flex items-center gap-5">
+              <li>
+                <Link href={portalHref} className="flex items-center gap-1.5 font-semibold text-white hover:text-amber">
+                  <Store aria-hidden="true" size={13} className="text-amber" />
+                  <span>Wholesale Customer Portal</span>
+                </Link>
+              </li>
               {location && (
                 <li className="flex items-center gap-1.5">
                   <MapPin aria-hidden="true" size={13} className="text-amber" />
@@ -240,6 +246,10 @@ export function Header({ social = [], categories = [], tagline, location, phone,
           </nav>
 
           <div className="flex items-center gap-2">
+            <Link href={portalHref} className="btn-outline hidden px-4 xl:inline-flex">
+              <Store aria-hidden="true" size={16} />
+              Wholesale Portal
+            </Link>
             <Link href={quoteHref} className="btn-accent hidden px-5 shadow-sm sm:inline-flex">
               Request a Quote
               <ArrowRight aria-hidden="true" size={16} />
@@ -308,7 +318,11 @@ export function Header({ social = [], categories = [], tagline, location, phone,
                   );
                 })}
 
-                <Link href={quoteHref} className="btn-accent mt-5 w-full py-3.5 text-base">
+                <Link href={portalHref} className="btn-outline mt-5 w-full py-3.5 text-base">
+                  <Store aria-hidden="true" size={18} />
+                  Wholesale Customer Portal
+                </Link>
+                <Link href={quoteHref} className="btn-accent mt-3 w-full py-3.5 text-base">
                   Request a Quote
                   <ArrowRight aria-hidden="true" size={18} />
                 </Link>

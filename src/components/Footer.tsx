@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { SocialIcon } from "@/components/SocialIcon";
-import { mainNav, quoteHref } from "@/config/navigation";
+import { mainNav, portalHref, quoteHref } from "@/config/navigation";
 import { placeholders } from "@/config/site";
 import { telHref } from "@/lib/content/helpers";
 import type { SiteContent } from "@/lib/content/types";
@@ -39,6 +39,11 @@ export function Footer({ content }: { content: SiteContent }) {
                 </Link>
               </li>
             ))}
+            <li>
+              <Link href={portalHref} className="hover:text-white">
+                Wholesale Customer Portal
+              </Link>
+            </li>
             <li>
               <Link href={quoteHref} className="font-semibold text-amber hover:text-amber-dark">
                 Request a Quote
