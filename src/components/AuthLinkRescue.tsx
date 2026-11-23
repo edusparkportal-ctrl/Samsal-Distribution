@@ -23,6 +23,12 @@ export function AuthLinkRescue() {
     }
 
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    // Used, expired or otherwise rejected link (Supabase puts the reason in the fragment or query string).
+    if (hash.get("error") || hash.get("error_code") || url.searchParams.get("error_code") || (url.pathname === "/" && url.searchParams.get("code"))) {
+      history.replaceState(null, "", url.pathname);
+      window.location.replace("/portal/login?error=link");
+      return;
+    }
     const type = hash.get("type");
     const access = hash.get("access_token");
     const refresh = hash.get("refresh_token");
