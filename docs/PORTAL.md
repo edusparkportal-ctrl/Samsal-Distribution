@@ -24,7 +24,7 @@ Static audit rule **R11** fails the build if portal code reads any table other t
 ## Turning it on (do in this order)
 
 1. Apply migration `20261120100000_customer_portal` (the pipeline does this on merge to `main`).
-2. Supabase > Authentication > Email Templates > **Invite user**: link must be `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (already the staff setup). Public sign-up stays disabled.
+2. Supabase > Authentication > Email Templates > **Invite user**: link must be `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (already the staff setup). Public sign-up stays disabled. If a customer's link ever lands on the public home page, the template is still the default `{{ .ConfirmationURL }}` or the redirect URL is missing from Authentication > URL Configuration > Redirect URLs (add `https://<your-domain>/auth/confirm`); the app has a fallback (`AuthLinkRescue`) that forwards them to set a password, but fix the template too.
 3. Vercel needs the existing public-form variables (`TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, Upstash Redis). Without them registration shows "temporarily unavailable" in production.
 4. Admin > Customer portal > **List prices**: set a price for each product customers may order (a product without a price shows "Price on request"). Add **Customer prices** where needed.
 5. Make sure stock is recorded (Inventory). A product with no stock movements shows "Availability on request" and can still be ordered; a product with movements is blocked when a customer asks for more than is in stock.

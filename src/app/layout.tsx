@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { site } from "@/config/site";
+import { AuthLinkRescue } from "@/components/AuthLinkRescue";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-KE" className={inter.variable}>
       <body>
+        <AuthLinkRescue />
         {children}
       </body>
     </html>
