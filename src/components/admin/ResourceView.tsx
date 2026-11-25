@@ -58,6 +58,9 @@ export async function ResourceView({ def, sp }: ResourceViewProps) {
         ) : (
           <Panel className="max-w-3xl"><ResourceForm def={def} row={row} lookups={lookups} cancelHref={def.singleton ? undefined : base} /></Panel>
         )}
+        {row && def.key === "deliveries" && (row.status === "in_transit" || row.status === "delivered") && (
+          <Panel className="mt-4 max-w-3xl"><p className="mb-3 text-sm text-charcoal">The delivery note is ready. Print it for the driver; the customer signs it on receipt. The customer can also download it from their portal.</p><a href={`${base}/${encodeURIComponent(String(row[def.pk]))}/pdf`} className="btn-primary">Download delivery note (PDF)</a></Panel>
+        )}
         {row && def.restrictedDocs && <RestrictedDocuments entityType={def.restrictedDocs} entityId={String(row[def.pk])} backPath={`${base}?edit=${encodeURIComponent(String(row[def.pk]))}`} />}
         {row && def.documentType && <RecordDocuments entityType={def.documentType} entityId={String(row[def.pk])} canManage={canChange} backPath={`${base}?edit=${encodeURIComponent(String(row[def.pk]))}`} />}
       </>

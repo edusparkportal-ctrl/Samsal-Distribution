@@ -52,3 +52,10 @@ export type TicketDetail = {
   order_id: string | null; order_number: string | null; invoice_id: string | null; invoice_number: string | null;
   messages: { id: string; from: "customer" | "staff"; author: string; body: string; created_at: string }[];
 };
+
+export type DeliveryNoteRow = { id: string; number: string; status: string; scheduled_date: string | null; delivered_at: string | null };
+export type DeliveryNoteDetail = {
+  id: string; number: string; status: string; scheduled_date: string | null; delivered_at: string | null; driver_name: string | null; vehicle_reg: string | null; recipient_name: string | null; notes: string | null;
+  order_number: string; delivery_address: string | null; customer_reference: string | null; customer: Party;
+  items: { line_no: number; description: string; quantity: number; unit: string | null }[];
+};

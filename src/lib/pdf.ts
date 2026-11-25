@@ -61,6 +61,8 @@ export class PdfDoc {
   }
   rect(x: number, y: number, w: number, h: number, fill: RGB) { this.cur += `${rgb(fill)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`; }
   rule(y: number, color: RGB = [200, 207, 214]) { this.cur += `${rgb(color)} RG 0.5 w ${this.left} ${y.toFixed(2)} m ${this.right} ${y.toFixed(2)} l S\n`; }
+  hline(x1: number, x2: number, y: number, color: RGB = [120, 130, 140]) { this.cur += `${rgb(color)} RG 0.6 w ${x1.toFixed(2)} ${y.toFixed(2)} m ${x2.toFixed(2)} ${y.toFixed(2)} l S\n`; }
+  frame(x: number, y: number, w: number, h: number, color: RGB = [150, 160, 170]) { this.cur += `${rgb(color)} RG 0.6 w ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S\n`; }
   /** Wrapped paragraph; returns nothing, advances this.y. */
   para(s: string, size = 10, bold = false, color: RGB = [38, 50, 56], maxW = this.width, x = this.left) {
     const lh = size * 1.35;

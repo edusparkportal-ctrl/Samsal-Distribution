@@ -642,6 +642,30 @@ select tst.ok(public.support_author_name('c0000000-0000-0000-0000-00000000000a')
 select tst.admin();
 select tst.count_is($$select count(*) from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r' and c.relname in ('support_tickets','support_messages') and not c.relrowsecurity$$, 0, 'structure: ticket tables have row level security');
 
+-- ---------------- delivery notes ----------------
+-- (an earlier tracking test already put one delivery of this order in transit; these tests follow their own delivery, DN)
+select tst.admin();
+create temp table _dn(id uuid);
+grant all on _dn to public;
+with ins as (insert into public.deliveries (sales_order_id, status, driver_name, vehicle_reg) select id, 'scheduled', 'Test Driver', 'KXX 001A' from _o limit 1 returning id)
+insert into _dn select id from ins;
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok(not exists (select 1 from jsonb_array_elements(public.portal_delivery_notes((select id from _o limit 1))) e where e ->> 'id' = (select id::text from _dn)), 'delivery notes: not available while the delivery is only scheduled');
+select tst.ok(public.portal_delivery_note((select id from _dn)) is null, 'delivery notes: a scheduled delivery cannot be opened either');
+select tst.admin();
+update public.deliveries set status = 'in_transit' where id = (select id from _dn);
+select tst.as_user('c0000000-0000-0000-0000-00000000000a');
+select tst.ok(exists (select 1 from jsonb_array_elements(public.portal_delivery_notes((select id from _o limit 1))) e where e ->> 'id' = (select id::text from _dn)), 'delivery notes: appears for the customer as soon as the delivery is in transit');
+select tst.ok((select public.portal_delivery_note((select id from _dn)) ->> 'number' like 'DN-%'), 'delivery notes: customer can read the note header');
+select tst.ok((select jsonb_array_length(public.portal_delivery_note((select id from _dn)) -> 'items') >= 1), 'delivery notes: the note lists the order lines');
+select tst.ok((select public.portal_delivery_note((select id from _dn))::text not like '%unit_price%'), 'delivery notes: no prices on the delivery note');
+select tst.as_user('c0000000-0000-0000-0000-00000000000b');
+select tst.ok(public.portal_delivery_note((select id from _dn)) is null, 'delivery notes: another customer cannot read it');
+select tst.ok(jsonb_array_length(public.portal_delivery_notes((select id from _o limit 1))) = 0, 'delivery notes: another customer cannot list them');
+select tst.anon();
+select tst.fails($$select public.portal_delivery_note('00000000-0000-0000-0000-000000000000')$$, 'delivery notes: anonymous visitors cannot call it');
+select tst.admin();
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;

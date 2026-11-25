@@ -6,7 +6,7 @@ import { PageHeader, Panel, Badge } from "@/components/admin/ui";
 import { PortalFlash } from "@/components/portal/PortalFlash";
 import { TRACK_STEPS, formatDate, formatDateTime, formatMoney, formatQty, orderStatus } from "@/lib/portal/format";
 import { isUuid } from "@/lib/admin/forms";
-import type { OrderDetail } from "@/lib/portal/types";
+import type { DeliveryNoteRow, OrderDetail } from "@/lib/portal/types";
 import { cancelOrder, repeatOrder } from "../../actions";
 
 export const metadata = { title: "Order" };
@@ -27,9 +27,10 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   await requireCustomer();
   if (!isUuid(id)) notFound();
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.rpc("portal_order", { p_order: id });
+  const [{ data }, { data: dn }] = await Promise.all([supabase.rpc("portal_order", { p_order: id }), supabase.rpc("portal_delivery_notes", { p_order: id })]);
   const o = data as OrderDetail | null;
   if (!o) notFound();
+  const notes = (dn as DeliveryNoteRow[] | null) ?? [];
   const st = orderStatus(o.status);
   const at = reached(o);
 
@@ -96,6 +97,19 @@ export default async function Page({ params, searchParams }: { params: Promise<{
               </ol>
             )}
           </Panel>
+          {notes.length > 0 && (
+            <Panel title="Delivery notes">
+              <p className="mb-3 text-sm text-charcoal">Please sign the delivery note when the goods arrive, and note any shortage or damage on it.</p>
+              <ul className="space-y-2">
+                {notes.map((n) => (
+                  <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span><span className="font-semibold text-navy">{n.number}</span> <span className="text-grey-500">· {n.status === "delivered" ? "Delivered" : "On its way"}</span></span>
+                    <a href={`/portal/orders/${o.id}/delivery/${n.id}/pdf`} className="btn-outline !px-3 !py-1.5">Download PDF</a>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
           <Panel title="Delivery">
             <dl className="space-y-2 text-sm">
               <div><dt className="font-semibold text-navy">Address</dt><dd className="whitespace-pre-line text-charcoal">{o.delivery_address ?? "-"}</dd></div>
