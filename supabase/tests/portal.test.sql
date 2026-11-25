@@ -666,6 +666,58 @@ select tst.anon();
 select tst.fails($$select public.portal_delivery_note('00000000-0000-0000-0000-000000000000')$$, 'delivery notes: anonymous visitors cannot call it');
 select tst.admin();
 
+-- ---------------- order pipeline (enquiry -> quotation -> order -> delivery -> invoice) ----------------
+select tst.admin();
+update public.modules set enabled = true where key in ('finance', 'crm', 'quotations');
+create temp table _pl(enq uuid, quo uuid);
+grant all on _pl to public;
+with e as (insert into public.enquiries (customer_id, product_text, delivery_location, required_by) values ('d0000000-0000-0000-0000-00000000000a', 'Bleach 20 litres x 10', 'Westlands, Nairobi', current_date + 5) returning id),
+     q as (insert into public.quotations (number, enquiry_id, customer_id, status, valid_until) select 'Q-PL-1', id, 'd0000000-0000-0000-0000-00000000000a', 'draft', current_date + 30 from e returning id, enquiry_id)
+insert into _pl select enquiry_id, id from q;
+insert into public.quotation_items (quotation_id, line_no, description, quantity, unit_price) select quo, 1, 'Regular bleach - 20 litres', 10, 2700 from _pl;
+select tst.ok((select status from public.enquiries where id = (select enq from _pl)) = 'quotation_prepared', 'pipeline: drafting a quotation moves the enquiry to quotation prepared');
+update public.quotations set status = 'sent' where id = (select quo from _pl);
+select tst.ok((select status from public.enquiries where id = (select enq from _pl)) = 'sent', 'pipeline: sending the quotation marks the enquiry sent');
+select tst.count_is($$select count(*) from public.sales_orders where quotation_id = (select quo from _pl)$$, 0, 'pipeline: no order until the quotation is accepted');
+update public.quotations set status = 'accepted' where id = (select quo from _pl);
+select tst.ok((select status from public.enquiries where id = (select enq from _pl)) = 'accepted', 'pipeline: accepting the quotation marks the enquiry accepted');
+select tst.count_is($$select count(*) from public.sales_orders where quotation_id = (select quo from _pl) and status = 'submitted' and delivery_address = 'Westlands, Nairobi' and requested_delivery_date = current_date + 5$$, 1, 'pipeline: an accepted quotation creates one order, awaiting confirmation, with the delivery address and date');
+select tst.count_is($$select count(*) from public.sales_order_items i join public.sales_orders o on o.id = i.order_id where o.quotation_id = (select quo from _pl) and i.unit_price = 2700 and i.quantity = 10$$, 1, 'pipeline: the order carries the quotation lines and prices');
+select tst.count_is($$select count(*) from public.deliveries d join public.sales_orders o on o.id = d.sales_order_id where o.quotation_id = (select quo from _pl)$$, 0, 'pipeline: no delivery until the order is confirmed');
+update public.sales_orders set status = 'confirmed' where quotation_id = (select quo from _pl);
+select tst.count_is($$select count(*) from public.deliveries d join public.sales_orders o on o.id = d.sales_order_id where o.quotation_id = (select quo from _pl) and d.status = 'scheduled' and d.scheduled_date = current_date + 5$$, 1, 'pipeline: confirming the order schedules a delivery for the requested date');
+update public.sales_orders set status = 'confirmed' where quotation_id = (select quo from _pl) and false;
+update public.deliveries set status = 'in_transit' where sales_order_id = (select id from public.sales_orders where quotation_id = (select quo from _pl));
+select tst.ok((select status from public.sales_orders where quotation_id = (select quo from _pl)) = 'processing', 'pipeline: a delivery going in transit moves the order on');
+update public.deliveries set status = 'delivered' where sales_order_id = (select id from public.sales_orders where quotation_id = (select quo from _pl));
+select tst.ok((select status from public.sales_orders where quotation_id = (select quo from _pl)) = 'delivered', 'pipeline: a delivered delivery marks the order delivered');
+select tst.ok((select delivered_at is not null from public.deliveries where sales_order_id = (select id from public.sales_orders where quotation_id = (select quo from _pl))), 'pipeline: the delivered time is stamped automatically');
+select tst.ok((select status from public.enquiries where id = (select enq from _pl)) = 'completed', 'pipeline: a delivered order completes the enquiry');
+select tst.count_is($$select count(*) from public.invoices where sales_order_id = (select id from public.sales_orders where quotation_id = (select quo from _pl)) and status = 'draft'$$, 1, 'pipeline: the delivered order gets its draft invoice (existing rule)');
+update public.invoices set status = 'issued', issue_date = current_date, due_date = current_date + 30 where sales_order_id = (select id from public.sales_orders where quotation_id = (select quo from _pl));
+select tst.ok((select status from public.sales_orders where quotation_id = (select quo from _pl)) = 'invoiced', 'pipeline: issuing the invoice marks the order invoiced');
+-- two deliveries for one order: the order is only partly delivered until the last one arrives
+insert into public.sales_orders (id, customer_id, status) values ('abcdef00-0000-0000-0000-0000000000a1', 'd0000000-0000-0000-0000-00000000000a', 'draft');
+insert into public.sales_order_items (order_id, line_no, description, quantity, unit_price) values ('abcdef00-0000-0000-0000-0000000000a1', 1, 'Split order line', 2, 10);
+update public.sales_orders set status = 'confirmed' where id = 'abcdef00-0000-0000-0000-0000000000a1';
+insert into public.deliveries (id, sales_order_id, status) values ('abcdef00-0000-0000-0000-0000000000d2', 'abcdef00-0000-0000-0000-0000000000a1', 'scheduled');
+update public.deliveries set status = 'delivered' where sales_order_id = 'abcdef00-0000-0000-0000-0000000000a1' and id <> 'abcdef00-0000-0000-0000-0000000000d2';
+select tst.ok((select status from public.sales_orders where id = 'abcdef00-0000-0000-0000-0000000000a1') = 'partially_delivered', 'pipeline: an order with another delivery still to come is only partly delivered');
+update public.deliveries set status = 'delivered' where id = 'abcdef00-0000-0000-0000-0000000000d2';
+select tst.ok((select status from public.sales_orders where id = 'abcdef00-0000-0000-0000-0000000000a1') = 'delivered', 'pipeline: ... and delivered once the last one arrives');
+-- cancelling an order cancels its scheduled delivery
+insert into public.sales_orders (id, customer_id, status) values ('abcdef00-0000-0000-0000-0000000000a3', 'd0000000-0000-0000-0000-00000000000a', 'draft');
+update public.sales_orders set status = 'confirmed' where id = 'abcdef00-0000-0000-0000-0000000000a3';
+update public.sales_orders set status = 'cancelled' where id = 'abcdef00-0000-0000-0000-0000000000a3';
+select tst.count_is($$select count(*) from public.deliveries where sales_order_id = 'abcdef00-0000-0000-0000-0000000000a3' and status = 'cancelled'$$, 1, 'pipeline: cancelling an order cancels its scheduled delivery');
+-- switching a link off stops it
+update public.automation_rules set enabled = false where key = 'pipeline_order_to_delivery';
+insert into public.sales_orders (id, customer_id, status) values ('abcdef00-0000-0000-0000-0000000000a4', 'd0000000-0000-0000-0000-00000000000a', 'draft');
+update public.sales_orders set status = 'confirmed' where id = 'abcdef00-0000-0000-0000-0000000000a4';
+select tst.count_is($$select count(*) from public.deliveries where sales_order_id = 'abcdef00-0000-0000-0000-0000000000a4'$$, 0, 'pipeline: switching the rule off stops the automatic delivery');
+update public.automation_rules set enabled = true where key = 'pipeline_order_to_delivery';
+select tst.count_is($$select count(*) from public.automation_rules where key like 'pipeline_%' and enabled$$, 5, 'pipeline: all five links are on by default');
+
 -- ---------------- report ----------------
 select tst.admin();
 select case when passed then 'PASS' else 'FAIL' end as result, label, coalesce(detail,'') as detail from tst.results where not passed order by n;

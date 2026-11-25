@@ -104,3 +104,8 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Admin sidebar: slim scrollbar that suits the dark background. */
+.admin-sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.25) transparent; }
+.admin-sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.admin-sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 9999px; }

@@ -47,8 +47,10 @@ export function AdminShell({ nav, user, unread = 0, approvals = 0, children }: {
   };
 
   const sidebar = (
-    <nav aria-label="Admin" className="flex h-full flex-col overflow-y-auto px-3 py-4">
-      <div className="px-3 pb-4"><Logo onDark /></div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 px-6 pb-3 pt-4"><Logo onDark /></div>
+      {/* The menu scrolls on its own: the logo stays put and scrolling here never moves the page behind it. */}
+      <nav aria-label="Admin" className="admin-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-6 pt-1">
       <div className="space-y-1.5">
         <div>{link("/admin", "Dashboard", LayoutDashboard)}</div>
         {nav.departments.map((d) => {
@@ -97,19 +99,20 @@ export function AdminShell({ nav, user, unread = 0, approvals = 0, children }: {
           </div>
         )}
       </div>
-    </nav>
+      </nav>
+    </div>
   );
 
   return (
     <div className="min-h-screen bg-grey">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 bg-navy lg:block">{sidebar}</aside>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden h-dvh w-64 overflow-hidden bg-navy lg:block">{sidebar}</aside>
 
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Admin menu">
           <button aria-label="Close menu" className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-navy shadow-xl">{sidebar}</aside>
+          <aside className="absolute inset-y-0 left-0 h-dvh w-72 max-w-[85vw] overflow-hidden bg-navy shadow-xl">{sidebar}</aside>
         </div>
       )}
 

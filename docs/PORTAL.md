@@ -133,3 +133,23 @@ Staff tip: give customers the variant SKUs you want them to use (Inventory > Pro
 - No file attachments on tickets.
 - Bulk upload accepts CSV only (save Excel sheets as CSV).
 - Bulk upload does not create orders directly: it fills the cart so the customer can review prices and stock first.
+
+## Order pipeline (enquiry to delivered invoice)
+
+Each step now moves the next one along. A person still decides the steps that commit money or promises.
+
+| Step | Who | What follows automatically (rule key) |
+|---|---|---|
+| New enquiry (website, phone or portal quote request) | customer / staff | assigned, staff alerted, customer acknowledged (existing rules) |
+| Quotation drafted for the enquiry | staff | enquiry becomes *quotation prepared* (`pipeline_enquiry_sync`) |
+| Quotation sent | staff | enquiry becomes *sent* |
+| Quotation accepted (portal or staff) | customer / staff | enquiry *accepted*; a sales order is created with the same lines and prices, waiting for confirmation, and the orders team is told (`pipeline_quote_to_order`) |
+| Order confirmed | staff | a delivery is scheduled for the customer's preferred date, if given (`pipeline_order_to_delivery`) |
+| Delivery marked in transit | staff | order becomes *processing*; delivery note is available to staff and customer (`pipeline_delivery_to_order`) |
+| Delivery marked delivered | staff | delivered time stamped; order becomes *delivered* (or *partially delivered* if another delivery is still to come); draft invoice created (`finance_invoice_drafts`); enquiry *completed* |
+| Invoice issued | finance | order becomes *invoiced* (`pipeline_invoice_to_order`) |
+| Order cancelled | staff / customer | its scheduled deliveries are cancelled |
+
+Each rule can be switched off on **Automation**. They only act on changes made after they were deployed. Failures are logged and
+never block the save that caused them. Not automated on purpose: pricing a quotation, sending it, confirming an order (stock check),
+issuing an invoice and recording payments. Stock is not deducted automatically because the new products have no stock variants yet.
