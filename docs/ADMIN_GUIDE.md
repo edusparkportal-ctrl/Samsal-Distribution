@@ -150,3 +150,20 @@ Leave decision notices, attendance alerts, contract-expiry reminders, onboarding
 
 ### Audit
 Every create, update, approval decision and payment record is written to the audit log with who and when.
+
+## Trade documents (Procurement & Supply > Trade documents)
+
+One place for the numbered documents of a transaction. Phase 1 covers the purchasing chain:
+Purchase Requisition, RFQ, Supplier Quotation, Comparison Sheet, Purchase Approval, Purchase Order, Proforma Invoice,
+Payment Voucher, Payment Confirmation, Supplier Delivery Note, GRN, Inspection Report, Supplier Tax Invoice.
+
+- **Numbers** are automatic (for example PR-2026-00001) and never reused.
+- **Next document:** when one is issued or approved, the next in the chain is created as a draft with the details carried over
+  (switch off under Automation: "Create the next trade document automatically").
+- **Approvals:** requisitions, purchase approvals and payment vouchers need approval (rules under Approvals > Approval rules).
+  The person who prepared a document cannot approve it.
+- **Links:** issuing a Purchase Order creates the purchase order record; a GRN adds stock and updates the order's received
+  quantities (it cannot receive more than ordered); a Supplier Tax Invoice creates the supplier bill.
+- **PDF:** every document downloads as a black, blue and gold PDF. Signatures and every change are kept in the audit trail.
+- **Permissions:** trade.view, trade.procurement, trade.warehouse, trade.finance, trade.quality, trade.approve,
+  trade.approve_payment, trade.manage (others are reserved for the sales and tender phases).

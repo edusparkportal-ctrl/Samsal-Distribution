@@ -17,7 +17,7 @@ import type { Permission } from "@/lib/auth/permissions";
 
 export type ModuleKey =
   | "website" | "crm" | "quotations" | "suppliers" | "procurement"
-  | "inventory" | "orders" | "portal" | "tenders" | "hr" | "people" | "finance" | "approvals" | "automation" | "reports" | "audit";
+  | "inventory" | "orders" | "portal" | "trade" | "tenders" | "hr" | "people" | "finance" | "approvals" | "automation" | "reports" | "audit";
 
 export type NavIcon =
   | "globe" | "building" | "users" | "share" | "home" | "package" | "tag" | "wrench" | "factory" | "image" | "search" | "megaphone" | "file"
@@ -165,6 +165,16 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
     ],
   },
   {
+    key: "trade",
+    label: "Trade documents",
+    icon: "filetext",
+    items: [
+      { label: "Documents dashboard", href: "/admin/trade", permission: "trade.view" },
+      { label: "Purchasing chain", href: "/admin/trade/chain/purchasing", permission: "trade.view" },
+      { label: "Archive & search", href: "/admin/trade/archive", permission: "trade.view" },
+    ],
+  },
+  {
     key: "approvals",
     label: "Approvals",
     icon: "clipboardcheck",
@@ -198,7 +208,7 @@ export const ADMIN_MODULES: AdminModuleDef[] = [
 export type DepartmentDef = { key: string; label: string; icon: NavIcon; modules: ModuleKey[] };
 export const DEPARTMENTS: DepartmentDef[] = [
   { key: "sales", label: "Sales & Customers", icon: "inbox", modules: ["crm", "quotations", "orders", "portal"] },
-  { key: "supply", label: "Procurement & Supply", icon: "truck", modules: ["suppliers", "procurement", "inventory", "tenders"] },
+  { key: "supply", label: "Procurement & Supply", icon: "truck", modules: ["suppliers", "procurement", "trade", "inventory", "tenders"] },
   { key: "people", label: "Human Resources", icon: "userplus", modules: ["people", "hr"] },
   { key: "finance", label: "Finance", icon: "wallet", modules: ["finance"] },
   { key: "marketing", label: "Website & Marketing", icon: "globe", modules: ["website"] },

@@ -74,7 +74,7 @@ insert into public.employees(full_name, department_id) values ('No Manager Nick'
 -- ---------------- organisation: directory access ----------------
 select tst.ok((select count(*) from public.employees) = 4, 'fixture: four employees');
 select tst.ok(exists(select 1 from public.modules where key in ('people','finance') group by () having count(*) = 2), 'people and finance modules exist');
-select tst.ok((select count(*) from public.approval_policies) = 4, 'default approval policies are seeded (leave, expense, bill, payroll)');
+select tst.ok((select count(*) from public.approval_policies where subject in ('leave','expense','bill','payroll')) = 4, 'default approval policies are seeded (leave, expense, bill, payroll)');
 select tst.as_user('b0000000-0000-0000-0000-000000000002');
 select tst.count_is($$select count(*) from public.employees$$, 4, 'HR officer sees the directory');
 select tst.works($$insert into public.employees(full_name) values ('New Hire')$$, 'HR officer can add an employee');
