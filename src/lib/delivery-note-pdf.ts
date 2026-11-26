@@ -1,6 +1,8 @@
-import { PdfDoc } from "@/lib/pdf";
+import { PdfDoc, type PdfImage } from "@/lib/pdf";
+import { placeLogo } from "@/lib/brand-logo";
 
 export type DeliveryNotePdfData = {
+  logo?: PdfImage | null;
   number: string; status: string; orderNumber: string; customerReference: string | null; scheduledDate: string | null; deliveredAt: string | null;
   driverName: string | null; vehicleReg: string | null; deliveryAddress: string | null; notes: string | null;
   company: { legalName: string; address: string | null; city: string | null; country: string | null; registrationDetails: string | null; taxPin: string | null; phone: string | null; email: string | null };
@@ -21,9 +23,10 @@ export function buildDeliveryNotePdf(d: DeliveryNotePdfData): Buffer {
   const doc = new PdfDoc(`${d.company.legalName}  |  Delivery note ${d.number}`);
   const L = doc.left, R = doc.right;
   doc.y -= 4;
-  doc.text(L, doc.y - 18, d.company.legalName, 17, true, NAVY);
+  const lw = placeLogo(doc, d.logo);
+  if (!lw) doc.text(L, doc.y - 18, d.company.legalName, 17, true, NAVY);
   doc.text(R, doc.y - 18, "DELIVERY NOTE", 17, true, TEAL, "r");
-  doc.y -= 26;
+  doc.y -= lw ? 54 : 26;
   const addr = [d.company.address, d.company.city, d.company.country].filter(Boolean).join(", ");
   for (const line of [addr, d.company.phone, d.company.email, d.company.registrationDetails, d.company.taxPin && `PIN: ${d.company.taxPin}`]) if (line) doc.para(line, 9, false, GREY);
   doc.gap(6); doc.rule(doc.y); doc.gap(10);

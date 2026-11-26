@@ -1,7 +1,9 @@
-import { PdfDoc } from "@/lib/pdf";
+import { PdfDoc, type PdfImage } from "@/lib/pdf";
+import { placeLogo } from "@/lib/brand-logo";
 import { computeTotals, lineTotal, money } from "@/lib/quotation";
 
 export type QuotationPdfData = {
+  logo?: PdfImage | null;
   number: string; status: string; currency: string; issueDate: string; validUntil: string | null;
   company: { legalName: string; address: string | null; city: string | null; country: string | null; registrationDetails: string | null; taxPin: string | null; phone: string | null; email: string | null };
   customer: { company: string | null; contact: string; email: string | null; phone: string | null; location: string | null };
@@ -18,9 +20,10 @@ export function buildQuotationPdf(d: QuotationPdfData): Buffer {
   const L = doc.left, R = doc.right;
 
   doc.y -= 4;
-  doc.text(L, doc.y - 18, d.company.legalName, 17, true, NAVY);
+  const lw = placeLogo(doc, d.logo);
+  if (!lw) doc.text(L, doc.y - 18, d.company.legalName, 17, true, NAVY);
   doc.text(R, doc.y - 18, "QUOTATION", 17, true, [11, 143, 135], "r");
-  doc.y -= 26;
+  doc.y -= lw ? 54 : 26;
   const addr = [d.company.address, d.company.city, d.company.country].filter(Boolean).join(", ");
   for (const line of [addr, d.company.phone, d.company.email, d.company.registrationDetails, d.company.taxPin && `PIN: ${d.company.taxPin}`]) {
     if (line) doc.para(line, 9, false, GREY);

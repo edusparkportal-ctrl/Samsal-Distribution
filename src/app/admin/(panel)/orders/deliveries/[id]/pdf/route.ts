@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pdfLogo } from "@/lib/brand-logo";
 import { checkPermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/admin/forms";
@@ -27,6 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const c = one<any>(o.customer); // eslint-disable-line @typescript-eslint/no-explicit-any
   const pick = (k: string) => (contacts ?? []).find((x: { kind: string; value: string }) => x.kind === k)?.value ?? null;
   const pdf = buildDeliveryNotePdf({
+    logo: await pdfLogo(),
     number: d.number, status: d.status, orderNumber: o.number, customerReference: o.customer_reference, scheduledDate: d.scheduled_date, deliveredAt: d.delivered_at,
     driverName: d.driver_name, vehicleReg: d.vehicle_reg, deliveryAddress: o.delivery_address, notes: d.notes,
     company: { legalName: co?.registered_name ?? "SAMSAL Supply & Distribution Limited", address: co?.address_line ?? null, city: co?.city ?? null, country: co?.country ?? null, registrationDetails: co?.registration_details ?? null, taxPin: co?.tax_pin ?? null, phone: pick("phone"), email: pick("email") },

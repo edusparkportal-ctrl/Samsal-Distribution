@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pdfLogo } from "@/lib/brand-logo";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPortalSession } from "@/lib/portal/session";
 import { isUuid } from "@/lib/admin/forms";
@@ -20,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!dn) return new NextResponse("Not found", { status: 404 });
   const co = (c ?? {}) as Partial<CompanyInfo>;
   const pdf = buildDeliveryNotePdf({
+    logo: await pdfLogo(),
     number: dn.number, status: dn.status, orderNumber: dn.order_number, customerReference: dn.customer_reference, scheduledDate: dn.scheduled_date, deliveredAt: dn.delivered_at,
     driverName: dn.driver_name, vehicleReg: dn.vehicle_reg, deliveryAddress: dn.delivery_address, notes: dn.notes,
     company: { legalName: co.legal_name ?? "SAMSAL Supply & Distribution Limited", address: co.address ?? null, city: co.city ?? null, country: co.country ?? null, registrationDetails: co.registration_details ?? null, taxPin: co.tax_pin ?? null, phone: co.phone ?? null, email: co.email ?? null },

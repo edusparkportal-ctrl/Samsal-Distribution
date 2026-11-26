@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pdfLogo } from "@/lib/brand-logo";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPortalSession } from "@/lib/portal/session";
 import { isUuid } from "@/lib/admin/forms";
@@ -22,6 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const pay = (p ?? null) as PayInfo | null;
   const instr = [pay?.mpesa_number ? `M-Pesa ${pay.mpesa_kind === "till" ? "Till" : "Paybill"} ${pay.mpesa_number}${pay.mpesa_kind === "paybill" ? ` (account ${inv.number})` : ""}` : null, pay?.bank_instructions, pay?.payment_note].filter(Boolean).join("\n") || null;
   const pdf = buildInvoicePdf({
+    logo: await pdfLogo(),
     number: inv.number, status: inv.status, currency: inv.currency, issueDate: inv.issue_date, dueDate: inv.due_date, taxRatePercent: Number(inv.tax_rate), orderNumber: inv.order_number,
     company: { legalName: co.legal_name ?? "SAMSAL Supply & Distribution Limited", address: co.address ?? null, city: co.city ?? null, country: co.country ?? null, registrationDetails: co.registration_details ?? null, taxPin: co.tax_pin ?? null, phone: co.phone ?? null, email: co.email ?? null },
     customer: inv.customer,

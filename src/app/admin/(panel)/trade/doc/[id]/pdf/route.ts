@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pdfLogo } from "@/lib/brand-logo";
 import { checkPermission } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/admin/forms";
@@ -34,6 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const pick = (k: string) => (contacts ?? []).find((x: { kind: string; value: string }) => x.kind === k)?.value ?? null;
   const stamp = (v: string) => new Date(v).toLocaleString("en-KE", { timeZone: "Africa/Nairobi", dateStyle: "medium", timeStyle: "short" });
   const pdf = buildTradePdf({
+    logo: await pdfLogo(),
     typeKey: d.doc_type, typeName: t.name, number: d.number, status: STATUS_LABEL[d.status] ?? d.status, title: d.title, reference: d.reference, docDate: d.doc_date, dueDate: d.due_date,
     currency: d.currency, total: Number(d.total), hasPrices: t.has_prices, hasLines: t.has_lines, notes: d.notes, data: d.data ?? {},
     partyLabel: t.party === "supplier" ? "Supplier" : t.party === "customer" ? "Customer" : null,

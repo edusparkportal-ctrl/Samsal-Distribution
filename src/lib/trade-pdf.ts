@@ -1,10 +1,12 @@
-import { PdfDoc, wrap } from "@/lib/pdf";
+import { PdfDoc, wrap, type PdfImage } from "@/lib/pdf";
+import { placeLogo } from "@/lib/brand-logo";
 import { DATA_FIELDS, money, qtyFmt } from "@/lib/trade";
 
 type RGB = [number, number, number];
 const BLACK: RGB = [11, 12, 14], BLUE: RGB = [46, 94, 142], GOLD: RGB = [201, 162, 39], GREY: RGB = [107, 120, 133], WHITE: RGB = [255, 255, 255];
 
 export type TradePdfData = {
+  logo?: PdfImage | null;
   typeKey: string; typeName: string; number: string; status: string; title: string | null; reference: string | null; docDate: string; dueDate: string | null;
   currency: string; total: number; hasPrices: boolean; hasLines: boolean; notes: string | null; data: Record<string, string>; partyLabel: string | null; partyName: string | null;
   parentNumber: string | null; poNumber: string | null; billNumber: string | null; issuedAt: string | null; preparedBy: string | null; generatedAt: string;
@@ -17,14 +19,17 @@ export type TradePdfData = {
 export function buildTradePdf(d: TradePdfData): Buffer {
   const doc = new PdfDoc(`${d.company.legalName}  |  ${d.typeName} ${d.number}  |  generated ${d.generatedAt}`);
   const L = doc.left, R = doc.right;
-  // header band
-  doc.rect(L - 12, doc.y - 54, doc.width + 24, 62, BLACK);
-  doc.rect(L - 12, doc.y - 57, doc.width + 24, 3, GOLD);
-  doc.text(L, doc.y - 24, d.company.legalName, 15, true, WHITE);
-  doc.text(L, doc.y - 40, [d.company.address, d.company.city, d.company.country].filter(Boolean).join(", "), 8.5, false, [200, 205, 212]);
-  doc.text(R, doc.y - 24, d.typeName.toUpperCase(), 15, true, GOLD, "r");
-  doc.text(R, doc.y - 40, d.number, 11, true, WHITE, "r");
-  doc.y -= 74;
+  // header: logo (or company name) on the left, document type and number on the right, black and gold rules beneath
+  const lw = placeLogo(doc, d.logo, 48, 210);
+  if (!lw) doc.text(L, doc.y - 20, d.company.legalName, 15, true, BLACK);
+  doc.text(R, doc.y - 16, d.typeName.toUpperCase(), 15, true, BLACK, "r");
+  doc.text(R, doc.y - 34, d.number, 11, true, BLUE, "r");
+  doc.y -= 56;
+  doc.rect(L, doc.y - 3, doc.width, 3, BLACK);
+  doc.rect(L, doc.y - 6, doc.width, 1.5, GOLD);
+  doc.y -= 12;
+  const addr = [d.company.address, d.company.city, d.company.country].filter(Boolean).join(", ");
+  if (addr) doc.para(`${d.company.legalName}, ${addr}`, 8.5, false, GREY);
   const contact = [d.company.phone, d.company.email, d.company.registrationDetails, d.company.taxPin && `PIN: ${d.company.taxPin}`].filter(Boolean).join("   |   ");
   if (contact) doc.para(contact, 8.5, false, GREY);
   doc.gap(8);
@@ -55,7 +60,7 @@ export function buildTradePdf(d: TradePdfData): Buffer {
     const cols = [fixed[0], doc.width - fixed.reduce((a, b) => a + b, 0), ...fixed.slice(1)];
     const align: ("l" | "r")[] = ["l", "l", "l", "r", ...(showAcc ? (["r"] as const) : []), ...(d.hasPrices ? (["r", "r"] as const) : [])];
     doc.table(head, d.lines.map((l, i) => [String(i + 1), l.description, l.unit ?? "", qtyFmt(l.quantity), ...(showAcc ? [l.accepted == null ? "-" : qtyFmt(l.accepted)] : []),
-      ...(d.hasPrices ? [money(l.unitPrice, d.currency).replace(`${d.currency} `, ""), money(l.quantity * l.unitPrice, d.currency).replace(`${d.currency} `, "")] : [])]), cols, align);
+      ...(d.hasPrices ? [money(l.unitPrice, d.currency).replace(`${d.currency} `, ""), money(l.quantity * l.unitPrice, d.currency).replace(`${d.currency} `, "")] : [])]), cols, align, 9, [24, 40, 60]);
   }
   if (d.hasPrices) { doc.gap(8); doc.ensure(30); doc.rect(R - 200, doc.y - 20, 200, 22, BLACK); doc.text(R - 192, doc.y - 14, "TOTAL", 9, true, GOLD); doc.text(R - 8, doc.y - 14, money(d.total, d.currency), 10.5, true, WHITE, "r"); doc.y -= 28; }
   if (d.notes) { doc.gap(6); doc.para("Notes", 8, true, BLUE); doc.para(d.notes, 9.5); }

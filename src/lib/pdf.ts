@@ -43,7 +43,11 @@ export function wrap(text: string, maxW: number, size: number, bold = false): st
 type RGB = [number, number, number];
 const rgb = (c: RGB) => c.map((x) => (x / 255).toFixed(3)).join(" ");
 
+/** A prepared image: zlib-compressed 8-bit RGB (and optional alpha) planes, ready to embed. */
+export type PdfImage = { width: number; height: number; rgb: Buffer; alpha: Buffer | null };
+
 export class PdfDoc {
+  private images: PdfImage[] = [];
   private pages: string[] = [];
   private cur = "";
   y = PAGE_H - MARGIN;
@@ -59,6 +63,12 @@ export class PdfDoc {
     const px = align === "r" ? x - textWidth(t, size, bold) : x;
     this.cur += `BT /${bold ? "F2" : "F1"} ${size} Tf ${rgb(color)} rg ${px.toFixed(2)} ${y.toFixed(2)} Td (${esc(t)}) Tj ET\n`;
   }
+  /** Draws an image with its lower-left corner at (x, y). */
+  image(x: number, y: number, w: number, h: number, img: PdfImage) {
+    let i = this.images.indexOf(img);
+    if (i < 0) { this.images.push(img); i = this.images.length - 1; }
+    this.cur += `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im${i + 1} Do Q\n`;
+  }
   rect(x: number, y: number, w: number, h: number, fill: RGB) { this.cur += `${rgb(fill)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`; }
   rule(y: number, color: RGB = [200, 207, 214]) { this.cur += `${rgb(color)} RG 0.5 w ${this.left} ${y.toFixed(2)} m ${this.right} ${y.toFixed(2)} l S\n`; }
   hline(x1: number, x2: number, y: number, color: RGB = [120, 130, 140]) { this.cur += `${rgb(color)} RG 0.6 w ${x1.toFixed(2)} ${y.toFixed(2)} m ${x2.toFixed(2)} ${y.toFixed(2)} l S\n`; }
@@ -71,11 +81,11 @@ export class PdfDoc {
   gap(h: number) { this.y -= h; if (this.y < MARGIN + 24) this.newPage(); }
 
   /** Table. cols: widths summing to this.width; align per column. */
-  table(head: string[], rows: string[][], cols: number[], align: ("l" | "r")[], size = 9) {
+  table(head: string[], rows: string[][], cols: number[], align: ("l" | "r")[], size = 9, headFill: RGB = [20, 45, 78]) {
     const pad = 5, lh = size * 1.3;
     const drawHead = () => {
       this.ensure(lh + 2 * pad);
-      this.rect(this.left, this.y - lh - 2 * pad, this.width, lh + 2 * pad, [20, 45, 78]);
+      this.rect(this.left, this.y - lh - 2 * pad, this.width, lh + 2 * pad, headFill);
       let x = this.left;
       head.forEach((h, i) => { this.text(align[i] === "r" ? x + cols[i] - pad : x + pad, this.y - pad - size, h, size, true, [255, 255, 255], align[i]); x += cols[i]; });
       this.y -= lh + 2 * pad;
@@ -103,12 +113,16 @@ export class PdfDoc {
     // 1 catalog, 2 pages, 3 F1, 4 F2, then per page: page obj + content obj
     const kids: number[] = [];
     const bodies: string[] = [];
+    // image objects come after the page objects: one per image, plus one soft mask when it has transparency
+    let nextObj = 5 + total * 2;
+    const imgObjs: { no: number; maskNo: number | null }[] = this.images.map((im) => { const no = nextObj++; const maskNo = im.alpha ? nextObj++ : null; return { no, maskNo }; });
+    const xobjects = imgObjs.length ? ` /XObject << ${imgObjs.map((o, i) => `/Im${i + 1} ${o.no} 0 R`).join(" ")} >>` : "";
     this.pages.forEach((content, i) => {
       const footer = `BT /F1 8 Tf 0.42 0.47 0.52 rg ${MARGIN} 28 Td (${esc(sanitise(this.footer))}) Tj ET\nBT /F1 8 Tf 0.42 0.47 0.52 rg ${(PAGE_W - MARGIN - 60).toFixed(2)} 28 Td (Page ${i + 1} of ${total}) Tj ET\n`;
       const stream = content + footer;
       const pageNo = 5 + i * 2, contentNo = 6 + i * 2;
       kids.push(pageNo);
-      bodies.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentNo} 0 R >>`);
+      bodies.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${contentNo} 0 R >>`);
       bodies.push(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}endstream`);
     });
     objs.push("<< /Type /Catalog /Pages 2 0 R >>");
@@ -116,6 +130,12 @@ export class PdfDoc {
     objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
     objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
     objs.push(...bodies);
+    const bin = (b: Buffer) => b.toString("latin1");
+    this.images.forEach((im, i) => {
+      const o = imgObjs[i];
+      objs.push(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode${o.maskNo ? ` /SMask ${o.maskNo} 0 R` : ""} /Length ${im.rgb.length} >>\nstream\n${bin(im.rgb)}\nendstream`);
+      if (im.alpha) objs.push(`<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${im.alpha.length} >>\nstream\n${bin(im.alpha)}\nendstream`);
+    });
     let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
     const offsets: number[] = [];
     objs.forEach((o, i) => { offsets.push(Buffer.byteLength(out, "latin1")); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });

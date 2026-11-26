@@ -69,6 +69,7 @@ const PUBLIC_ROUTES = {
   "src/app/api/csp-report/route.ts": "browser CSP reports: size and rate limited, sanitised",
   "src/app/api/health/route.ts": "uptime probe: reveals nothing but ok/unavailable",
   "src/app/api/automation/dispatch/route.ts": "scheduler: CRON_SECRET bearer, constant-time compare",
+  "src/app/brand/logo/route.ts": "public company logo: no input, serves only the uploaded public-bucket image (or the built-in logo), cached",
   "src/app/auth/confirm/route.ts": "email link: allow-listed types, rate limited, safeNext",
   "src/app/api/mpesa/callback/[token]/route.ts": "Safaricom callback: secret path token (constant-time), 20KB cap, success confirmed by our own STK Query, applied once in the database",
 };
